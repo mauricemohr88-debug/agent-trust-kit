@@ -11,7 +11,7 @@ Snapshot: 2026-08-02, before the first public release.
 - source distributions and wheels for both packages;
 - `twine check` for all four distributions;
 - fresh-environment installation and CLI version smoke from the built wheels;
-- local user-plugin installation from the source tree now published as commit
+- local user-plugin installation from the source tree recorded as commit
   `74c9dc4` on Hermes Agent 0.15.1 (release 2026.5.29), with the three intended
   model tools, the narrow `pre_tool_call` hook, and the operator CLI loaded from
   the installed clone;

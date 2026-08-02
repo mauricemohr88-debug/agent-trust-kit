@@ -38,10 +38,10 @@ trusted controller -> independent checks -> accept or reject
 - [Understand the security boundary](THREAT_MODEL.md)
 - [Review the local validation record](docs/LOCAL_VALIDATION.md)
 
-This is the **first public source release**. The tools reduce common handoff
-mistakes; they do not send packets, sandbox workers, control every Hermes tool,
-guarantee that sensitive data is absent, prove that a worker was honest, or
-merge returned changes automatically.
+This working tree is prepared as the **first public source release**. The tools
+reduce common handoff mistakes; they do not send packets, sandbox workers,
+control every Hermes tool, guarantee that sensitive data is absent, prove that
+a worker was honest, or merge returned changes automatically.
 
 ## Development
 
