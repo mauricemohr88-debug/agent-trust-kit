@@ -42,7 +42,7 @@
 
 - [ ] One real but non-sensitive workflow has been dogfooded.
 - [ ] At least two outside testers can follow the quick start without help.
-- [ ] Native Hermes plugin installation and a synthetic return have been tested
+- [x] Native Hermes plugin installation and a synthetic return have been tested
       from a clean user-plugin directory on a supported Hermes release.
 - [x] Open security blockers are zero.
 - [ ] Maurice explicitly approves public GitHub/PyPI publishing.
