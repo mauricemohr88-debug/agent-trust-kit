@@ -1,4 +1,4 @@
-# v0.1.0 — First public source release
+# Draft v0.1.0 release notes
 
 Agent Trust Kit makes AI-agent handoffs narrower and easier to inspect:
 explicitly select the input, record claims and evidence on return, and let the
@@ -23,7 +23,7 @@ automatically.
 
 ## Validation
 
-Before source publication, the repository passed locally:
+At source publication, the repository passed locally:
 
 - 81 tests on each of Python 3.10, 3.11, 3.12, 3.13, and 3.14;
 - Ruff lint and formatting checks;
@@ -31,6 +31,10 @@ Before source publication, the repository passed locally:
 - fresh-environment wheel-install and CLI smoke tests;
 - a synthetic native Hermes handoff ending in a fully rechecked, read-only
   snapshot.
+
+The first public `main` push also passed GitHub Actions CI and CodeQL. The first
+Dependabot update was validated across Python 3.10–3.14, distribution builds,
+and CodeQL after synchronizing the generated lockfile.
 
 See the [local validation record](LOCAL_VALIDATION.md) for the exact scope.
 
@@ -44,6 +48,7 @@ private work.
 
 ## Availability
 
-This is the first public source release. `agent-packet` and `agent-receipt` are
-not yet published on PyPI. A real non-sensitive dogfood workflow and feedback
-from outside testers remain planned before public package publication.
+The source repository is public, but `v0.1.0` has not yet been tagged as a
+GitHub release and `agent-packet` and `agent-receipt` are not yet published on
+PyPI. A real non-sensitive dogfood workflow and feedback from outside testers
+remain planned before a formal release decision.

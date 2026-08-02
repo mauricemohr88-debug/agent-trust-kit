@@ -1,6 +1,6 @@
 # Local validation record
 
-Snapshot: 2026-08-02, before the first public release.
+Snapshot: 2026-08-02, at first public source publication.
 
 ## Passed locally
 
@@ -29,10 +29,14 @@ The reproducible local entry point is:
 scripts/check.sh
 ```
 
+## Passed remotely
+
+- GitHub Actions CI and CodeQL passed on the first public `main` push. The first
+  Dependabot update also passed the Python 3.10–3.14 matrix, distribution build,
+  and CodeQL after its generated lockfile was synchronized.
+
 ## Deliberately not claimed yet
 
-- The GitHub Actions and CodeQL workflows have not run remotely because this
-  working copy has not been pushed.
 - The tools have not yet been followed by two outside testers without help.
 - A real but non-sensitive Hermes-to-worker workflow still needs to be dogfooded;
   the completed native workflow above was deliberately synthetic.

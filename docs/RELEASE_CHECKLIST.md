@@ -35,6 +35,7 @@
 - [x] Wheels contain only intended package files.
 - [x] GitHub Actions are least-privilege and pinned to reviewed commit SHAs.
 - [x] Dependabot/Renovate and CodeQL configuration reviewed.
+- [x] Public `main` CI and CodeQL completed successfully after source publication.
 - [x] Public GitHub repository name and CLI names checked immediately before
       source publication.
 - [ ] PyPI distribution names checked immediately before package publication.
@@ -48,4 +49,5 @@
       from a clean user-plugin directory on a supported Hermes release.
 - [x] Open security blockers are zero.
 - [x] Maurice explicitly approves public GitHub source publication.
+- [x] Public GitHub source repository published.
 - [ ] Maurice explicitly approves PyPI package publication.

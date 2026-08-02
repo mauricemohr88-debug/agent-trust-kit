@@ -38,7 +38,7 @@ trusted controller -> independent checks -> accept or reject
 - [Understand the security boundary](THREAT_MODEL.md)
 - [Review the local validation record](docs/LOCAL_VALIDATION.md)
 
-This working tree is prepared as the **first public source release**. The tools
+The source repository is public. The tools
 reduce common handoff mistakes; they do not send packets, sandbox workers,
 control every Hermes tool, guarantee that sensitive data is absent, prove that
 a worker was honest, or merge returned changes automatically.
@@ -106,12 +106,12 @@ release and support cycles.
 
 ## Status
 
-- This working tree is prepared for its first public source push;
-  `agent-packet` and `agent-receipt` are not yet published on PyPI.
+- The public source repository is live; `agent-packet` and `agent-receipt` are
+  not yet published on PyPI.
 - Local lint, the Python 3.10–3.14 test matrix, package builds, wheel-install
   smoke, and the end-to-end handoff are green; see the
   [local validation record](docs/LOCAL_VALIDATION.md).
-- Remote GitHub CI/CodeQL will be checked immediately after the first push. One real
+- GitHub CI and CodeQL are green on the public `main` branch. One real
   non-sensitive dogfood workflow, feedback from two outside testers, and
   separate PyPI approval remain before public package publication.
 
