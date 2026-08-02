@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-receipt"
+version = "0.1.0"
+description = "Offline, bounded claim-to-evidence receipts for agent handoffs"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{name = "Maurice Mohr"}]
+keywords = ["ai-agents", "hermes", "openclaw", "verification", "receipts"]
+classifiers = ["Programming Language :: Python :: 3"]
+dependencies = ["cryptography>=42"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "ruff>=0.9"]
+
+[project.scripts]
+agent-receipt = "agent_receipt.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["agent_receipt"]
