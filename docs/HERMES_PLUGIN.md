@@ -25,27 +25,25 @@ a packet before it leaves the controller. A returned workspace is verified
 without running commands; normal tests or CI remain a separate controller
 decision.
 
-## Local installation
+## Installation
 
-The working copy can be installed into the user Hermes plugin directory:
+Install the public repository into the user Hermes plugin directory:
 
 ```bash
-hermes plugins install file:///Users/maurice/Projects/agent-trust-kit --enable
-hermes agent-trust project add agent-trust-kit /Users/maurice/Projects/agent-trust-kit
+hermes plugins install mauricemohr88-debug/agent-trust-kit --enable
+hermes agent-trust project add my-project /path/to/git/project
 hermes agent-trust project list
 hermes agent-trust doctor
 ```
 
 Start a new Hermes session after enabling the plugin. The installer clones the
-repository into Hermes' user plugin area; it does not publish anything. This
-plugin loads the two bundled package sources from that exact clone and verifies
-their origins instead of trusting another installed copy. A local Git install
-contains committed files only, so commit the reviewed integration first.
+repository into Hermes' user plugin area. This plugin loads the two bundled
+package sources from that exact clone and verifies their origins instead of
+trusting another installed copy.
 
-For a future GitHub installation, use the same form with the actual published
-repository, for example `hermes plugins install owner/repo --enable`. Do not
-use that placeholder until the repository has intentionally been published and
-reviewed.
+For local development, a committed working copy can be installed with
+`hermes plugins install file:///absolute/path/to/agent-trust-kit --enable`.
+The local Git installer clones committed files only.
 
 ## Typical controller flow
 

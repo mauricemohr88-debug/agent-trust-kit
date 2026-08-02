@@ -35,7 +35,9 @@
 - [x] Wheels contain only intended package files.
 - [x] GitHub Actions are least-privilege and pinned to reviewed commit SHAs.
 - [x] Dependabot/Renovate and CodeQL configuration reviewed.
-- [ ] Repository name, PyPI names, and CLI names checked immediately before publish.
+- [x] Public GitHub repository name and CLI names checked immediately before
+      source publication.
+- [ ] PyPI distribution names checked immediately before package publication.
 - [ ] PyPI trusted publishing is used; no long-lived upload token is stored.
 
 ## Release decision
@@ -45,4 +47,5 @@
 - [x] Native Hermes plugin installation and a synthetic return have been tested
       from a clean user-plugin directory on a supported Hermes release.
 - [x] Open security blockers are zero.
-- [ ] Maurice explicitly approves public GitHub/PyPI publishing.
+- [x] Maurice explicitly approves public GitHub source publication.
+- [ ] Maurice explicitly approves PyPI package publication.

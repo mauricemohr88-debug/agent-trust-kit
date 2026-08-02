@@ -21,7 +21,7 @@ still move data outside this flow.
 Install and configure the plugin on the trusted controller:
 
 ```bash
-hermes plugins install file:///Users/maurice/Projects/agent-trust-kit --enable
+hermes plugins install mauricemohr88-debug/agent-trust-kit --enable
 hermes agent-trust project add my-project /path/to/git/project
 ```
 
