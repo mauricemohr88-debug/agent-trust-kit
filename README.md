@@ -106,12 +106,12 @@ release and support cycles.
 
 ## Status
 
-- The source repository is public; `agent-packet` and `agent-receipt` are not yet
-  published on PyPI.
+- This working tree is prepared for its first public source push;
+  `agent-packet` and `agent-receipt` are not yet published on PyPI.
 - Local lint, the Python 3.10–3.14 test matrix, package builds, wheel-install
   smoke, and the end-to-end handoff are green; see the
   [local validation record](docs/LOCAL_VALIDATION.md).
-- Remote GitHub CI/CodeQL will be checked after the first push. One real
+- Remote GitHub CI/CodeQL will be checked immediately after the first push. One real
   non-sensitive dogfood workflow, feedback from two outside testers, and
   separate PyPI approval remain before public package publication.
 
