@@ -7,6 +7,12 @@ defence-in-depth for accidental disclosure, unsafe archive handling, ambiguous
 inputs, and unsupported completion claims. They are not a sandbox or a security
 certification.
 
+The native Hermes plugin adds a controller-side workflow around these formats:
+registered Git projects, explicit includes, clean-commit preparation, an
+operator-review workflow, a fixed private return quarantine, and receipt
+verification with a deterministic output manifest. It does not change the
+fundamental trust model.
+
 ## Roles and trust boundaries
 
 - **Controller:** chooses source files, task, packet digest, verification root,
@@ -17,6 +23,9 @@ certification.
   buggy, compromised, or dishonest.
 - **Verification workspace:** a controller-selected checkout or extracted result.
   Receipt content must never choose files outside this root.
+- **Hermes plugin:** a convenience and policy boundary on the controller. It is
+  trusted only for the checks it actually performs; it is not an OS or network
+  enforcement layer.
 
 ## Assets
 
@@ -52,6 +61,8 @@ certification.
 - arbitrary commands or receipt-chosen working directories;
 - replay against the wrong task, packet, input revision, or output set;
 - a valid signature being misrepresented as proof that a claim is true.
+- bypassing the plugin through a different Hermes tool, a manual transfer, or a
+  compromised local process;
 
 ## Security properties
 
@@ -66,6 +77,13 @@ certification.
   transported beside the archive through the same untrusted channel is not an
   authenticity control.
 - Receipt paths are relative and rechecks use a controller-supplied root.
+- Native Hermes preparation requires a registered Git project and explicit
+  includes, rejects a dirty input commit, and requires every selected file to
+  match a regular tracked blob at that exact commit.
+- Native Hermes verification recomputes the exact returned file set and output
+  manifest in a fixed private quarantine, copies the declared return into a
+  controller-owned read-only snapshot, then performs a full evidence recheck
+  there without executing worker-reported commands.
 - Commands are never taken as executable authority merely because they appear in
   a receipt. Independent command rechecks require a controller-owned allowlist.
 - An unkeyed content digest detects inconsistent or unrehashed receipt changes;
@@ -85,6 +103,10 @@ certification.
 - Protecting against a compromised controller, kernel, Python runtime, trusted
   key store, or a local attacker that can win filesystem races.
 - Proving a worker actually performed a self-reported command.
+- Enforcing that every Hermes egress path, browser session, MCP server, or manual
+  action passes through the plugin. The narrow delegation hook is only
+  defense-in-depth and can be bypassed when the plugin is not loaded or another
+  tool is used.
 
 Use an OS/container sandbox, least-privilege credentials, an isolated checkout,
 code review, and CI controls in addition to these tools.

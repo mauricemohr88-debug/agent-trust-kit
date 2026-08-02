@@ -35,6 +35,7 @@ jobs:
           build-mode: none
           config: |
             paths:
+              - hermes_integration
               - packages/agent-packet/src
               - packages/agent-receipt/src
 

@@ -71,13 +71,42 @@ verification exits successfully only for `fully_rechecked`. A lower threshold
 requires an explicit decision such as `--minimum-assurance reported`; that mode
 validates structure and internal consistency, not claim truth.
 
+## Canonical output manifests
+
+The controller can inventory a completed output directory without executing any
+of its contents:
+
+```bash
+agent-receipt manifest create --workspace-root ./worker-output --json
+agent-receipt manifest verify --workspace-root ./worker-output \
+  --expected-digest '<independently trusted digest>' --json
+```
+
+Creation writes `OUTPUT_MANIFEST.json` under the selected root by default. The
+manifest uses the strict `agent-output-manifest/v1` schema: relative POSIX paths
+are unique and sorted, and every regular file has a SHA-256 and byte count. Its
+digest is SHA-256 over canonical UTF-8 JSON with sorted object keys and compact
+separators, excluding the storage newline. Verification rebuilds the inventory
+and requires the exact file set, sizes, and hashes—not just the files named in the
+manifest. JSON with duplicate object keys is rejected.
+
+Traversal is descriptor-relative and bounded by file count, entry count, depth,
+per-file size, total bytes, path length, and manifest size. Symbolic links, hard
+links, special files, path traversal, duplicate paths, and detectable path/content
+changes during scanning fail closed. `receipt.json` and `OUTPUT_MANIFEST.json` at
+the root are control files and are excluded by default; a custom CLI manifest path
+inside the root is also excluded exactly. No broad ignore patterns are applied.
+Creation and verification each require two complete, identical scans. This catches
+late changes missed by an earlier per-entry check, but it is not a transactional
+filesystem snapshot and cannot prevent a write after the final system call. Stop
+the worker before scanning and keep the output root quiescent until acceptance.
+
 To bind a receipt to a handoff, supply all three strict context values at build and
 verify time: `--packet-digest`, `--input-commit`, and `--output-manifest-digest`.
 Verification compares the receipt context exactly to the verifier-provided values.
-The CLI does not generate the output manifest: it is an external, deterministic
-artifact owned by the controller. Only use this context field when both sides have
-agreed on the same canonical manifest format and the verifier computes its digest
-independently.
+Use the digest printed by `manifest create`, transfer it through a trusted channel,
+and independently run `manifest verify` before accepting the receipt. The digest
+is unkeyed; use the receipt's Ed25519 signature when signer attribution is needed.
 
 ## Signatures
 

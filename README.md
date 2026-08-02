@@ -36,6 +36,29 @@ Package-specific instructions and examples live in each package README. The
 [Hermes/OpenClaw walkthrough](docs/HERMES_OPENCLAW_FLOW.md) shows the complete
 handoff and independent verification boundary.
 
+## Native Hermes integration
+
+The repository root is also a Hermes plugin. It exposes `handoff_prepare`,
+`handoff_status`, and `handoff_verify_return`, while keeping approval and local
+paths on the operator-facing `hermes agent-trust` CLI. Prepare accepts only a
+registered Git project, explicit include paths, and a clean input commit.
+Verification uses a fixed private quarantine, requires
+`OUTPUT_MANIFEST.json` plus `receipt.json`, performs a full recheck without
+executing worker commands, and never merges automatically.
+
+Install the current working copy locally with:
+
+```bash
+hermes plugins install file:///Users/maurice/Projects/agent-trust-kit --enable
+hermes agent-trust project add my-project /path/to/git/project
+```
+
+This is a local integration example; the repository has not been published by
+this working copy. The plugin is not a global egress gate or OS sandbox. Other
+Hermes tools, manual transfers, and a compromised host remain outside its
+boundary. Read [the plugin guide](docs/HERMES_PLUGIN.md) and
+[the threat model](THREAT_MODEL.md) before using it with private work.
+
 ## Why open source, and what can be paid?
 
 The local formats, scanners, verification logic, signatures, and CI examples stay

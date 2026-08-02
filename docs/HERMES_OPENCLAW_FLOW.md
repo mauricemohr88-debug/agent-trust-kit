@@ -1,5 +1,10 @@
 # Hermes to remote-worker handoff
 
+The repository now includes a native Hermes plugin that keeps the controller
+steps local and explicit. The standalone CLIs below remain useful for a worker
+environment or for other orchestrators; the plugin is the recommended Hermes
+entry point.
+
 This walkthrough separates three things that are often confused:
 
 1. selecting what may leave the controller;
@@ -7,7 +12,62 @@ This walkthrough separates three things that are often confused:
 3. independently rechecking returned evidence at the controller.
 
 It does not create an OS sandbox. Run the worker and every controller-approved
-command with the least privileges appropriate for the repository.
+command with the least privileges appropriate for the repository. The Hermes
+plugin is not a global egress gate: terminal, browser, MCP, or manual paths can
+still move data outside this flow.
+
+## Native Hermes path
+
+Install and configure the plugin on the trusted controller:
+
+```bash
+hermes plugins install file:///Users/maurice/Projects/agent-trust-kit --enable
+hermes agent-trust project add my-project /path/to/git/project
+```
+
+Then use `handoff_prepare` with an explicit `project_id`, `task`, and `include`
+list. Review the result and record operator approval:
+
+```bash
+hermes agent-trust approve <handoff-id>
+hermes agent-trust return-path <handoff-id>
+```
+
+Only after approval should a separate worker workflow materialize the packet.
+The worker must return the exact result files plus `OUTPUT_MANIFEST.json` and
+`receipt.json` to the fixed quarantine path. Call `handoff_verify_return` to
+create a private controller snapshot and perform the full recheck there. It
+never executes receipt commands, creates a receipt, sends a packet, or merges
+code. After successful verification, obtain the stable review location with:
+
+```bash
+hermes agent-trust verified-path <handoff-id>
+```
+
+Use that read-only snapshot for inspection. Copy it to a separate isolated
+working directory before running any test or build that requires write access.
+
+After work has stopped, the worker creates the manifest first and copies its
+printed digest into all three receipt-context flags:
+
+```bash
+agent-receipt manifest create --workspace-root /tmp/worker-return
+
+agent-receipt build \
+  --workspace-root /tmp/worker-return \
+  --agent remote-worker \
+  --task "review the selected files" \
+  --claim result="RESULT.md was returned" \
+  --file-hash result=RESULT.md \
+  --packet-digest '<approved-packet-sha256>' \
+  --input-commit '<controller-input-commit>' \
+  --output-manifest-digest '<printed-manifest-sha256>' \
+  --out /tmp/worker-return/receipt.json
+```
+
+The native verifier requires every receipt evidence item to be independently
+recheckable without commands. Command evidence therefore fails the native
+`fully_rechecked` policy and is never executed by the plugin.
 
 ## 1. Controller: build and inspect
 
@@ -117,10 +177,12 @@ Pass all three flags during `build`, then pass the independently known values
 again during `verify`. A mismatch fails verification. Do not simply copy the
 expected values out of the untrusted receipt.
 
-This repository does not define or generate that output manifest. Use the field
-only if the controller and worker already share a canonical manifest format and
-the controller computes the digest independently; otherwise leave all three
-optional context fields unset.
+The native Hermes flow requires this context and computes the output-manifest
+digest independently at verification time. The worker must use the repository's
+deterministic output-manifest format and return `OUTPUT_MANIFEST.json`; a
+missing file, extra file, changed file, or context mismatch fails closed. The
+standalone CLI remains flexible and may leave the optional context unset when
+used outside the plugin.
 
 Ed25519 signing can attribute a receipt to a trusted public key distributed by a
 separate channel. It does not prove that commands ran or that outputs are safe.

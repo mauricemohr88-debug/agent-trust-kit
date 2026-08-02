@@ -10,6 +10,13 @@
       verifier-selected root.
 - [x] Commands require a controller-owned exact allowlist, an absolute executable
       path, controller-owned success criteria, and explicit opt-in.
+- [x] Hermes integration documents the operator-review workflow and does not claim
+      human authentication, global egress, or OS-sandbox enforcement.
+- [x] Native Hermes preparation requires registered Git projects, explicit
+      includes, and a clean commit by default.
+- [x] Native Hermes return verification requires `OUTPUT_MANIFEST.json` and
+      `receipt.json`, rechecks all evidence without executing commands, and does
+      not merge changes automatically.
 
 ## Adversarial verification
 
@@ -35,5 +42,7 @@
 
 - [ ] One real but non-sensitive workflow has been dogfooded.
 - [ ] At least two outside testers can follow the quick start without help.
+- [ ] Native Hermes plugin installation and a synthetic return have been tested
+      from a clean user-plugin directory on a supported Hermes release.
 - [x] Open security blockers are zero.
 - [ ] Maurice explicitly approves public GitHub/PyPI publishing.

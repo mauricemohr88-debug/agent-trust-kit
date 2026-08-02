@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shlex
 from pathlib import Path
 
@@ -21,6 +22,14 @@ from .core import (
     sign_receipt,
     verify_receipt,
 )
+from .output_manifest import (
+    OutputManifestError,
+    create_output_manifest,
+    load_output_manifest,
+    manifest_digest,
+    save_output_manifest,
+    verify_output_manifest,
+)
 
 
 def _load_receipt_or_exit(path: Path) -> dict:
@@ -28,6 +37,26 @@ def _load_receipt_or_exit(path: Path) -> dict:
         return load_receipt(path)
     except (OSError, UnicodeError, ValueError) as exc:
         raise SystemExit(f"could not read receipt {str(path)!r}: {exc}") from exc
+
+
+def _manifest_file_exclusion(workspace_root: Path, manifest_path: Path) -> set[str]:
+    """Exclude a controller-selected manifest file when it lives below the scanned root."""
+
+    root = Path(workspace_root).resolve(strict=True)
+    candidate = manifest_path.parent.resolve(strict=True) / manifest_path.name
+    try:
+        relative = candidate.relative_to(root)
+    except ValueError:
+        return set()
+    return {relative.as_posix()} if relative.parts else set()
+
+
+def _print_manifest_error(operation: str, exc: Exception, *, json_output: bool) -> int:
+    message = f"manifest {operation} failed: {exc}"
+    if json_output:
+        print(json.dumps({"ok": False, "error": message}, sort_keys=True))
+        return 1
+    raise SystemExit(message) from exc
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -91,7 +120,7 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--input-commit", help="Full 40- or 64-character Git commit ID")
     b.add_argument(
         "--output-manifest-digest",
-        help="SHA-256 of an externally generated deterministic output manifest",
+        help="SHA-256 of the controller-generated canonical output manifest",
     )
     b.add_argument("--json", action="store_true")
 
@@ -146,7 +175,106 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("receipt", type=Path)
     s.add_argument("--json", action="store_true")
 
+    m = sub.add_parser("manifest", help="Create or independently verify an output manifest")
+    manifest_sub = m.add_subparsers(dest="manifest_cmd", required=True)
+
+    mc = manifest_sub.add_parser("create", help="Inventory the exact regular-file output set")
+    mc.add_argument(
+        "--workspace-root",
+        type=Path,
+        required=True,
+        help="Controller-selected output root",
+    )
+    mc.add_argument(
+        "--out",
+        type=Path,
+        help="Manifest destination (default: OUTPUT_MANIFEST.json under the root)",
+    )
+    mc.add_argument("--json", action="store_true")
+
+    mv = manifest_sub.add_parser("verify", help="Re-scan and require the exact declared output")
+    mv.add_argument(
+        "manifest_file",
+        type=Path,
+        nargs="?",
+        help="Manifest file (default: OUTPUT_MANIFEST.json under the root)",
+    )
+    mv.add_argument(
+        "--workspace-root",
+        type=Path,
+        required=True,
+        help="Controller-selected output root",
+    )
+    mv.add_argument(
+        "--expected-digest",
+        help="Independently trusted SHA-256 of the canonical manifest",
+    )
+    mv.add_argument("--json", action="store_true")
+
     args = parser.parse_args(argv)
+
+    if args.cmd == "manifest":
+        if args.manifest_cmd == "create":
+            try:
+                root = args.workspace_root.resolve(strict=True)
+                output = args.out or (root / "OUTPUT_MANIFEST.json")
+                exclude = _manifest_file_exclusion(root, output)
+                manifest, digest = create_output_manifest(root, exclude=exclude)
+                save_output_manifest(manifest, output)
+                result = {
+                    "ok": True,
+                    "digest": digest,
+                    "files": manifest["file_count"],
+                    "total_bytes": manifest["total_bytes"],
+                    "manifest": str(output.parent.resolve(strict=True) / output.name),
+                }
+            except (OSError, UnicodeError, OutputManifestError, ValueError) as exc:
+                return _print_manifest_error("create", exc, json_output=args.json)
+            if args.json:
+                print(json.dumps(result, sort_keys=True))
+            else:
+                print(f"manifest written: {result['manifest']}")
+                print(
+                    f"digest={result['digest']} files={result['files']} "
+                    f"bytes={result['total_bytes']}"
+                )
+            return 0
+
+        if args.manifest_cmd == "verify":
+            try:
+                root = args.workspace_root.resolve(strict=True)
+                manifest_path = args.manifest_file or (root / "OUTPUT_MANIFEST.json")
+                if (
+                    args.expected_digest is not None
+                    and re.fullmatch(r"[0-9a-f]{64}", args.expected_digest) is None
+                ):
+                    raise OutputManifestError("--expected-digest must be lowercase SHA-256 hex")
+                manifest = load_output_manifest(manifest_path)
+                loaded_digest = manifest_digest(manifest)
+                if args.expected_digest is not None and loaded_digest != args.expected_digest:
+                    result = {
+                        "ok": False,
+                        "digest": loaded_digest,
+                        "files": manifest["file_count"],
+                        "errors": ["manifest digest does not match trusted digest"],
+                    }
+                    if args.json:
+                        print(json.dumps(result, sort_keys=True))
+                    else:
+                        print(f"ok=False digest={loaded_digest} files={manifest['file_count']}")
+                        print(f"error: {result['errors'][0]}")
+                    return 1
+                exclude = _manifest_file_exclusion(root, manifest_path)
+                result = verify_output_manifest(manifest, root, exclude=exclude)
+            except (OSError, UnicodeError, OutputManifestError, ValueError) as exc:
+                return _print_manifest_error("verify", exc, json_output=args.json)
+            if args.json:
+                print(json.dumps(result, sort_keys=True))
+            else:
+                print(f"ok={result['ok']} digest={result['digest']} files={result['files']}")
+                for error in result["errors"]:
+                    print(f"error: {error}")
+            return 0 if result["ok"] else 1
 
     if args.cmd == "build":
         claims_map: dict[str, Claim] = {}

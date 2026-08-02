@@ -1,0 +1,15 @@
+manifest_version: 1
+name: agent-trust
+version: "0.1.0"
+description: "Bounded agent handoffs with controller-side verification."
+author: "Maurice Mohr"
+kind: standalone
+platforms:
+  - macos
+  - linux
+provides_tools:
+  - handoff_prepare
+  - handoff_status
+  - handoff_verify_return
+provides_hooks:
+  - pre_tool_call

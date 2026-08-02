@@ -35,3 +35,6 @@ ignore = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["agent_packet", "agent_receipt"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
