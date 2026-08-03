@@ -28,6 +28,9 @@
 - [x] A clean end-to-end packet -> work -> receipt -> controller recheck passes.
 - [x] Changing one input, output, command policy, packet digest, or receipt byte
       produces the expected failure.
+- [x] Preapproval review and approval reject mismatched archive/state data and
+      tampered local manifests, digest sidecars, links, special files, or extra
+      payload files.
 
 ## Supply chain and packaging
 
@@ -43,7 +46,7 @@
 
 ## Release decision
 
-- [ ] One real but non-sensitive workflow has been dogfooded.
+- [x] One real but non-sensitive workflow has been dogfooded and recorded.
 - [ ] At least two outside testers can follow the quick start without help.
 - [x] Native Hermes plugin installation and a synthetic return have been tested
       from a clean user-plugin directory on a supported Hermes release.

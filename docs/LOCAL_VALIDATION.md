@@ -1,6 +1,6 @@
 # Local validation record
 
-Snapshot: 2026-08-02, at first public source publication.
+Snapshot: 2026-08-03, after the first native Hermes dogfood workflow.
 
 ## Passed locally
 
@@ -18,6 +18,17 @@ Snapshot: 2026-08-02, at first public source publication.
 - a synthetic native handoff through the installed plugin, ending in a private
   read-only snapshot with `fully_rechecked` assurance, zero worker commands
   executed by the verifier, and no automatic merge;
+- a real non-sensitive, maintainer-run native Hermes handoff through a separate
+  bounded reviewer workspace, including an expected packet-policy rejection,
+  operator approval, a receipt-backed return, a fully rechecked snapshot, and a
+  post-verification mutation of the original quarantine copy; see the
+  [dogfood record](DOGFOOD_2026-08-03.md);
+- the full release-preparation check after adding preapproval packet review: 94
+  tests, Ruff lint and formatting, the end-to-end smoke, both package builds,
+  `twine check`, and isolated wheel installation;
+- a focused read-only security review of the preapproval change found no P0,
+  P1, or P2 issue; additional P3 adversarial coverage was then added for local
+  manifest, sidecar, link, special-file, and extra-file tampering;
 - the full check from a fresh local Git clone, which remained worktree-clean;
 - two focused read-only security reviews after the packet, receipt, snapshot,
   bounded-process, and state-lock hardening, with no open P0, P1, or P2 findings
@@ -38,10 +49,8 @@ scripts/check.sh
 ## Deliberately not claimed yet
 
 - The tools have not yet been followed by two outside testers without help.
-- A real but non-sensitive Hermes-to-worker workflow still needs to be dogfooded;
-  the completed native workflow above was deliberately synthetic.
 - This is not a penetration test, certification, sandbox, DLP system, or guarantee
   that heuristic secret detection finds every sensitive value.
 
-Public package release therefore remains subject to the
+Formal release and public package publication therefore remain subject to the
 [release checklist](RELEASE_CHECKLIST.md) and Maurice's explicit approval.

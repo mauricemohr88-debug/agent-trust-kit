@@ -23,7 +23,7 @@ from .bootstrap import ensure_repo_local_core
 
 ensure_repo_local_core()
 
-from agent_packet.builder import build_packet  # noqa: E402
+from agent_packet.builder import build_packet, inspect_packet  # noqa: E402
 from agent_packet.secrets import scan_text_for_secrets  # noqa: E402
 from agent_receipt.core import load_receipt, verify_receipt  # noqa: E402
 
@@ -797,7 +797,7 @@ class TrustRuntime:
             self._harden_tree(final_dir)
             return {
                 **self._public_state(state_data),
-                "next_action": f"Operator review: hermes agent-trust approve {handoff_id}",
+                "next_action": f"Operator review: hermes agent-trust review {handoff_id}",
                 "transported": False,
             }
         except TrustError:
@@ -853,6 +853,132 @@ class TrustRuntime:
                     result.append({"handoff_id": path.name, "status": "invalid"})
         return result
 
+    def review(self, handoff_id: Any) -> dict[str, Any]:
+        """Inspect and bind a prepared packet to its private controller state."""
+
+        with self._handoff_lock(handoff_id):
+            state_data, directory = self._state(handoff_id)
+            return self._review_locked(state_data, directory)
+
+    def _review_locked(self, state_data: dict[str, Any], directory: Path) -> dict[str, Any]:
+        if state_data["status"] != "prepared":
+            raise TrustError("invalid_transition", "Only a prepared handoff can be reviewed.")
+
+        packet_path = directory / "packet" / "packet.tar.gz"
+        try:
+            manifest, archive_digest = inspect_packet(packet_path)
+        except (OSError, ValueError) as exc:
+            raise TrustError(
+                "packet_invalid",
+                "The prepared packet failed structural inspection; do not approve it.",
+            ) from exc
+
+        if archive_digest != state_data["packet_digest"]:
+            raise TrustError(
+                "packet_digest_mismatch",
+                "The prepared packet digest does not match controller state; do not approve it.",
+            )
+
+        manifest_files = [entry["path"] for entry in manifest["files"]]
+        if (
+            manifest["task"] != state_data["task"]
+            or manifest["include"] != state_data["include"]
+            or manifest_files != ["TASK.md", *state_data["files"]]
+            or manifest["denied"]
+            or manifest["redactions"]
+            or manifest["warnings"]
+            or manifest["meta"]
+            or any(
+                entry["redactions"] != 0 or entry["mode"] != "text" for entry in manifest["files"]
+            )
+        ):
+            raise TrustError(
+                "packet_state_mismatch",
+                "The prepared packet does not match controller state; do not approve it.",
+            )
+
+        paths = self._verified_review_paths(directory, manifest, state_data["packet_digest"])
+        return {
+            "handoff_id": state_data["handoff_id"],
+            "project_id": state_data["project_id"],
+            "status": state_data["status"],
+            "input_commit": state_data["input_commit"],
+            "packet_digest": state_data["packet_digest"],
+            "task": state_data["task"],
+            "include": state_data["include"],
+            "file_count": len(state_data["files"]),
+            "files": state_data["files"],
+            "structural_validation": "passed",
+            "state_binding": "passed",
+            "paths": paths,
+            "next_action": f"hermes agent-trust approve {state_data['handoff_id']}",
+        }
+
+    def _verified_review_paths(
+        self, directory: Path, manifest: dict[str, Any], packet_digest: str
+    ) -> dict[str, str]:
+        packet_root = directory / "packet"
+        payload_root = packet_root / "payload"
+        paths = {
+            "packet": packet_root / "packet.tar.gz",
+            "digest": packet_root / "PACKET_SHA256.txt",
+            "manifest": packet_root / "manifest.json",
+            "payload": payload_root,
+            "task": payload_root / "TASK.md",
+        }
+        try:
+            for candidate in (packet_root, payload_root):
+                info = candidate.lstat()
+                if not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode):
+                    raise ValueError("review directory is unsafe")
+
+            expected_manifest = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode(
+                "utf-8"
+            )
+            expected_sidecar = f"{packet_digest}  packet.tar.gz\n".encode("ascii")
+            if (
+                _sha256_file(paths["packet"]) != packet_digest
+                or _sha256_file(paths["manifest"]) != hashlib.sha256(expected_manifest).hexdigest()
+                or _sha256_file(paths["digest"]) != hashlib.sha256(expected_sidecar).hexdigest()
+            ):
+                raise ValueError("review artifact digest mismatch")
+
+            observed_files: list[str] = []
+            for current_raw, directories, filenames in os.walk(
+                payload_root, topdown=True, followlinks=False
+            ):
+                current = Path(current_raw)
+                current_info = current.lstat()
+                if not stat.S_ISDIR(current_info.st_mode) or stat.S_ISLNK(current_info.st_mode):
+                    raise ValueError("review payload contains an unsafe directory")
+                for name in directories:
+                    child_info = (current / name).lstat()
+                    if not stat.S_ISDIR(child_info.st_mode) or stat.S_ISLNK(child_info.st_mode):
+                        raise ValueError("review payload contains an unsafe directory")
+                for name in filenames:
+                    child = current / name
+                    child_info = child.lstat()
+                    if not stat.S_ISREG(child_info.st_mode) or child_info.st_nlink != 1:
+                        raise ValueError("review payload contains an unsafe file")
+                    observed_files.append(child.relative_to(payload_root).as_posix())
+
+            expected_entries = {entry["path"]: entry for entry in manifest["files"]}
+            if sorted(observed_files) != sorted(expected_entries):
+                raise ValueError("review payload file list mismatch")
+            for relative, entry in expected_entries.items():
+                source = payload_root.joinpath(*PurePosixPath(relative).parts)
+                if (
+                    source.lstat().st_size != entry["bytes"]
+                    or _sha256_file(source) != entry["sha256"]
+                ):
+                    raise ValueError("review payload content mismatch")
+        except (OSError, TrustError, ValueError) as exc:
+            raise TrustError(
+                "packet_artifact_mismatch",
+                "Local packet inspection artifacts do not match the reviewed archive.",
+            ) from exc
+        return {key: str(value) for key, value in paths.items()}
+
     def approve(self, handoff_id: Any) -> dict[str, Any]:
         with self._handoff_lock(handoff_id):
             return self._approve_locked(handoff_id)
@@ -866,9 +992,7 @@ class TrustRuntime:
             }
         if state_data["status"] != "prepared":
             raise TrustError("invalid_transition", "Only a prepared handoff can be approved.")
-        digest = _sha256_file(directory / "packet" / "packet.tar.gz")
-        if digest != state_data["packet_digest"]:
-            raise TrustError("packet_digest_mismatch", "The packet changed after preparation.")
+        self._review_locked(state_data, directory)
         timestamp = _now()
         state_data["status"] = "approved"
         state_data["updated_at"] = timestamp

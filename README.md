@@ -37,6 +37,7 @@ trusted controller -> independent checks -> accept or reject
 - [Install and use the native Hermes plugin](docs/HERMES_PLUGIN.md)
 - [Understand the security boundary](THREAT_MODEL.md)
 - [Review the local validation record](docs/LOCAL_VALIDATION.md)
+- [Read the first native Hermes dogfood record](docs/DOGFOOD_2026-08-03.md)
 
 The source repository is public. The tools
 reduce common handoff mistakes; they do not send packets, sandbox workers,
@@ -112,7 +113,8 @@ release and support cycles.
   smoke, and the end-to-end handoff are green; see the
   [local validation record](docs/LOCAL_VALIDATION.md).
 - GitHub CI and CodeQL are green on the public `main` branch. One real
-  non-sensitive dogfood workflow, feedback from two outside testers, and
-  separate PyPI approval remain before public package publication.
+  non-sensitive native Hermes workflow has now been dogfooded; see the
+  [recorded result](docs/DOGFOOD_2026-08-03.md). Feedback from two outside
+  testers and separate PyPI approval remain before public package publication.
 
 MIT licensed. See [SECURITY.md](SECURITY.md) for responsible reporting.

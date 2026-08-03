@@ -29,9 +29,16 @@ Then use `handoff_prepare` with an explicit `project_id`, `task`, and `include`
 list. Review the result and record operator approval:
 
 ```bash
+hermes agent-trust review <handoff-id>
 hermes agent-trust approve <handoff-id>
 hermes agent-trust return-path <handoff-id>
 ```
+
+The CLI-only `review` command structurally parses the controller's private
+archive and binds its digest, task, include list, and exact file list back to
+the handoff state. It also verifies the fixed local inspection copies before
+printing the task, includes, and a bounded set of private paths. Inspect those
+paths as the operator; they are intentionally not exposed through a model tool.
 
 Only after approval should a separate worker workflow materialize the packet.
 The worker must return the exact result files plus `OUTPUT_MANIFEST.json` and
