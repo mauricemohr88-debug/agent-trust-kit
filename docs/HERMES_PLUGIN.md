@@ -16,8 +16,8 @@ The plugin registers three model-facing tools:
 | `handoff_verify_return` | Verify a returned result from the fixed private quarantine using the expected packet, commit, and output-manifest context. |
 
 The plugin also registers the operator-facing `hermes agent-trust` command. Its
-subcommands are `project add`, `project list`, `status`, `approve`, `reject`,
-`return-path`, `verified-path`, and `doctor`.
+subcommands are `project add`, `project list`, `status`, `review`, `approve`,
+`reject`, `return-path`, `verified-path`, and `doctor`.
 
 There is deliberately no model-facing `send`, `materialize`, `create receipt`,
 or `merge` operation. The intended workflow has an operator review and approve
@@ -53,8 +53,13 @@ The local Git installer clones committed files only.
    relative `include` paths. The policy requires a clean commit, and every
    packetized file must be a regular tracked blob whose bytes exactly match that
    commit. Ignored, untracked, filtered, and submodule content is refused.
-3. Inspect the bounded result and use the operator-facing command
-   `hermes agent-trust approve <handoff-id>` when the packet is acceptable.
+3. Run `hermes agent-trust review <handoff-id>` before approval. It defensively
+   parses the private archive, checks its digest, task, include list, and exact
+   file list against controller state, and verifies the fixed local inspection
+   copies. The command prints the task and include list plus a bounded set of
+   private archive, manifest, digest, payload, and task paths for operator-only
+   inspection. If those checks and the content review are acceptable, run
+   `hermes agent-trust approve <handoff-id>`.
 4. Transfer and materialize the approved packet through the separately chosen
    worker workflow. The worker must return `OUTPUT_MANIFEST.json` and
    `receipt.json` alongside its result files.
@@ -80,9 +85,11 @@ Runtime state is stored below Hermes' home in an `agent-trust` directory. Policy
 handoff metadata, packets, and the fixed return quarantine are private local
 state. The plugin uses explicit includes and conservative deny rules; it does
 not inspect an arbitrary home directory or silently include the whole project.
-Operator CLI output may show local paths when needed to approve or materialize a
-packet. Model-facing tool responses are bounded and avoid exposing those local
-paths unnecessarily. A successful verification retains a private read-only
+Operator CLI output may show a fixed, bounded set of local paths when needed to
+review, approve, or materialize a packet. `review` is deliberately CLI-only;
+there is no corresponding model-facing tool. Model-facing tool responses are
+bounded and avoid exposing those local paths unnecessarily. A successful
+verification retains a private read-only
 snapshot and rechecks its manifest and receipt before reporting it as verified
 again; later changes in the original return directory are not trusted.
 

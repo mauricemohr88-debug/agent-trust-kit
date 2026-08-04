@@ -12,7 +12,8 @@ controller recheck the result before accepting or merging it.
   controller-selected rechecks;
 - a native Hermes plugin exposing `handoff_prepare`, `handoff_status`, and
   `handoff_verify_return`;
-- operator-controlled project registration and packet approval;
+- operator-controlled project registration, preapproval packet review, and
+  packet approval;
 - a fixed private return quarantine with manifest, digest, commit, and receipt
   checks;
 - a controller-owned read-only verified snapshot;
@@ -31,6 +32,16 @@ At source publication, the repository passed locally:
 - fresh-environment wheel-install and CLI smoke tests;
 - a synthetic native Hermes handoff ending in a fully rechecked, read-only
   snapshot.
+
+On 2026-08-03, the installed native plugin also completed a real non-sensitive,
+maintainer-run handoff through a separate bounded reviewer workspace. The run
+included an expected secret-policy rejection, exact packet review, a
+receipt-backed return, a fully rechecked snapshot, and a post-verification
+mutation check. See the [dogfood record](DOGFOOD_2026-08-03.md).
+
+The resulting preapproval review change passed 94 tests, Ruff lint and format,
+the end-to-end smoke, source and wheel builds, `twine check`, and isolated wheel
+installation in the release-preparation environment.
 
 The first public `main` push also passed GitHub Actions CI and CodeQL. The first
 Dependabot update was validated across Python 3.10–3.14, distribution builds,
@@ -51,4 +62,5 @@ private work.
 The source repository is public, but `v0.1.0` has not yet been tagged as a
 GitHub release and `agent-packet` and `agent-receipt` are not yet published on
 PyPI. A real non-sensitive dogfood workflow and feedback from outside testers
-remain planned before a formal release decision.
+were release gates. Dogfooding is now complete; feedback from two outside
+testers still remains before a formal release decision.

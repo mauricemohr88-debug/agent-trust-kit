@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -306,6 +307,151 @@ def test_operator_approval_is_required_before_return_path(tmp_path: Path) -> Non
     assert Path(approved["packet_path"]).is_file()
     assert runtime.return_path(prepared["handoff_id"]).name == "return"
     assert not runtime.return_path(prepared["handoff_id"]).exists()
+
+
+def test_operator_review_binds_packet_and_exposes_only_fixed_local_paths(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    runtime, _project_root = _runtime_and_project(tmp_path)
+    prepared = _prepare(runtime)
+    parser = argparse.ArgumentParser()
+    setup_cli(parser)
+
+    args = parser.parse_args(["review", prepared["handoff_id"]])
+    assert handle_cli(args, runtime) == 0
+    result = json.loads(capsys.readouterr().out)
+
+    assert result["status"] == "prepared"
+    assert result["task"] == "Review the public fixture and return a short result."
+    assert result["include"] == ["README.md", "src/app.py"]
+    assert result["files"] == ["README.md", "src/app.py"]
+    assert result["structural_validation"] == "passed"
+    assert result["state_binding"] == "passed"
+    assert set(result["paths"]) == {"packet", "digest", "manifest", "payload", "task"}
+    assert all(
+        Path(value).resolve(strict=True).is_relative_to(runtime.root)
+        for value in result["paths"].values()
+    )
+    state, _directory = runtime._state(prepared["handoff_id"])
+    assert state["status"] == "prepared" and state["approval"] is None
+
+
+@pytest.mark.parametrize(
+    ("field", "replacement"),
+    [
+        ("task", "A different but still bounded task."),
+        ("include", ["README.md"]),
+        ("files", ["README.md"]),
+    ],
+)
+def test_operator_review_rejects_packet_state_mismatch(
+    tmp_path: Path, field: str, replacement: Any
+) -> None:
+    runtime, _project_root = _runtime_and_project(tmp_path)
+    prepared = _prepare(runtime)
+    state, directory = runtime._state(prepared["handoff_id"])
+    state[field] = replacement
+    runtime._write_json(directory / "state.json", state)
+
+    with pytest.raises(TrustError) as error:
+        runtime.review(prepared["handoff_id"])
+
+    assert error.value.code == "packet_state_mismatch"
+
+
+def test_operator_review_and_approval_fail_closed_on_packet_tampering(tmp_path: Path) -> None:
+    runtime, _project_root = _runtime_and_project(tmp_path)
+    prepared = _prepare(runtime)
+    replacement = _prepare(runtime)
+    _state, directory = runtime._state(prepared["handoff_id"])
+    _replacement_state, replacement_directory = runtime._state(replacement["handoff_id"])
+    shutil.copyfile(
+        replacement_directory / "packet" / "packet.tar.gz",
+        directory / "packet" / "packet.tar.gz",
+    )
+
+    with pytest.raises(TrustError) as review_error:
+        runtime.review(prepared["handoff_id"])
+    with pytest.raises(TrustError) as approval_error:
+        runtime.approve(prepared["handoff_id"])
+
+    assert review_error.value.code == "packet_digest_mismatch"
+    assert approval_error.value.code == "packet_digest_mismatch"
+    assert runtime.status({"handoff_id": prepared["handoff_id"]})["status"] == "prepared"
+
+
+def test_operator_review_rejects_mismatched_local_inspection_payload(tmp_path: Path) -> None:
+    runtime, _project_root = _runtime_and_project(tmp_path)
+    prepared = _prepare(runtime)
+    _state, directory = runtime._state(prepared["handoff_id"])
+    (directory / "packet" / "payload" / "README.md").write_text(
+        "different local inspection copy\n", encoding="utf-8"
+    )
+
+    with pytest.raises(TrustError) as error:
+        runtime.review(prepared["handoff_id"])
+
+    assert error.value.code == "packet_artifact_mismatch"
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    [
+        "manifest",
+        "digest",
+        "payload_symlink",
+        "payload_hardlink",
+        "payload_extra_file",
+        "payload_fifo",
+        "payload_directory_symlink",
+    ],
+)
+def test_operator_review_and_approval_reject_local_artifact_tampering(
+    tmp_path: Path, tamper: str
+) -> None:
+    runtime, _project_root = _runtime_and_project(tmp_path)
+    prepared = _prepare(runtime)
+    _state, directory = runtime._state(prepared["handoff_id"])
+    packet_root = directory / "packet"
+    payload_root = packet_root / "payload"
+
+    if tamper == "manifest":
+        (packet_root / "manifest.json").write_text("{}\n", encoding="utf-8")
+    elif tamper == "digest":
+        (packet_root / "PACKET_SHA256.txt").write_text(
+            f"{'0' * 64}  packet.tar.gz\n", encoding="ascii"
+        )
+    elif tamper == "payload_symlink":
+        target = payload_root / "README.md"
+        target.unlink()
+        target.symlink_to(tmp_path / "project" / "README.md")
+    elif tamper == "payload_hardlink":
+        replacement = tmp_path / "hardlink-source.txt"
+        replacement.write_text("# Public fixture\n", encoding="utf-8")
+        target = payload_root / "README.md"
+        target.unlink()
+        os.link(replacement, target)
+    elif tamper == "payload_extra_file":
+        (payload_root / "EXTRA.md").write_text("extra\n", encoding="utf-8")
+    elif tamper == "payload_fifo":
+        target = payload_root / "README.md"
+        target.unlink()
+        os.mkfifo(target)
+    elif tamper == "payload_directory_symlink":
+        target = payload_root / "src"
+        shutil.rmtree(target)
+        target.symlink_to(tmp_path / "project" / "src", target_is_directory=True)
+    else:  # pragma: no cover - the parameter list is closed above
+        raise AssertionError(f"unknown tamper case: {tamper}")
+
+    with pytest.raises(TrustError) as review_error:
+        runtime.review(prepared["handoff_id"])
+    with pytest.raises(TrustError) as approval_error:
+        runtime.approve(prepared["handoff_id"])
+
+    assert review_error.value.code == "packet_artifact_mismatch"
+    assert approval_error.value.code == "packet_artifact_mismatch"
+    assert runtime.status({"handoff_id": prepared["handoff_id"]})["status"] == "prepared"
 
 
 def test_return_verification_binds_packet_commit_and_exact_output(tmp_path: Path) -> None:

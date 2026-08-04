@@ -28,6 +28,11 @@ def setup_cli(parser: argparse.ArgumentParser) -> None:
     status = commands.add_parser("status", help="List handoffs or show one handoff")
     status.add_argument("handoff_id", nargs="?")
 
+    review = commands.add_parser(
+        "review", help="Structurally inspect a prepared packet before approval"
+    )
+    review.add_argument("handoff_id")
+
     approve = commands.add_parser(
         "approve", help="Record operator approval for a prepared packet after review"
     )
@@ -79,6 +84,9 @@ def handle_cli(args: argparse.Namespace, runtime: TrustRuntime | None = None) ->
             else:
                 _print(runtime.list_handoffs())
             return 0
+        if command == "review":
+            _print(runtime.review(args.handoff_id))
+            return 0
         if command == "approve":
             _print(runtime.approve(args.handoff_id))
             return 0
@@ -97,7 +105,7 @@ def handle_cli(args: argparse.Namespace, runtime: TrustRuntime | None = None) ->
             return 0 if result["ok"] else 1
         print(
             "usage: hermes agent-trust "
-            "{project,status,approve,reject,return-path,verified-path,doctor}"
+            "{project,status,review,approve,reject,return-path,verified-path,doctor}"
         )
         return 2
     except TrustError as exc:
