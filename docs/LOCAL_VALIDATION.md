@@ -2,6 +2,11 @@
 
 Snapshot: 2026-08-03, after the first native Hermes dogfood workflow.
 
+The 0.15.1 native-plugin and dogfood facts below are historical records. A
+separate, isolated Hermes v0.20.0 compatibility check was recorded on
+2026-08-05; it did not upgrade this repository's live Hermes installation. See
+[the compatibility record](COMPATIBILITY_2026-08-05.md).
+
 ## Passed locally
 
 - Ruff lint and format checks across the workspace;
