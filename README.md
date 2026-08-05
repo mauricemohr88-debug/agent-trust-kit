@@ -38,6 +38,7 @@ trusted controller -> independent checks -> accept or reject
 - [Understand the security boundary](THREAT_MODEL.md)
 - [Review the local validation record](docs/LOCAL_VALIDATION.md)
 - [Read the first native Hermes dogfood record](docs/DOGFOOD_2026-08-03.md)
+- [Review the isolated Hermes v0.20.0 compatibility check](docs/COMPATIBILITY_2026-08-05.md)
 
 The source repository is public. The tools
 reduce common handoff mistakes; they do not send packets, sandbox workers,
@@ -116,5 +117,9 @@ release and support cycles.
   non-sensitive native Hermes workflow has now been dogfooded; see the
   [recorded result](docs/DOGFOOD_2026-08-03.md). Feedback from two outside
   testers and separate PyPI approval remain before public package publication.
+- An isolated compatibility check against Hermes v0.20.0 (official tag
+  `v2026.8.3`) passed the plugin-load and focused smoke coverage; it is not a
+  claim that this repository has been live-upgraded. See the
+  [compatibility record](docs/COMPATIBILITY_2026-08-05.md).
 
 MIT licensed. See [SECURITY.md](SECURITY.md) for responsible reporting.
