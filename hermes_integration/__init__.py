@@ -70,7 +70,11 @@ def register(ctx: Any) -> None:
         ctx.register_tool(
             name=name,
             toolset="agent_handoff",
-            schema=schema,
+            schema={
+                "name": name,
+                "description": description,
+                "parameters": schema,
+            },
             handler=_tool_handler(runtime, operation),
             description=description,
             emoji=emoji,

@@ -183,6 +183,13 @@ def test_register_exposes_only_controller_tools_and_operator_cli(
         "handoff_verify_return",
     }
     assert {tool.toolset for tool in context.tools.values()} == {"agent_handoff"}
+    for name, tool in context.tools.items():
+        assert tool.schema["name"] == name
+        assert tool.schema["description"] == tool.description
+        parameters = tool.schema["parameters"]
+        assert parameters["type"] == "object"
+        assert parameters["required"]
+        assert parameters["additionalProperties"] is False
     assert set(context.hooks) == {"pre_tool_call"}
     assert set(context.cli) == {"agent-trust"}
     assert all(tool.check_fn is None for tool in context.tools.values())
