@@ -44,10 +44,14 @@
 - [x] PyPI distribution names checked on 2026-08-22 immediately before release
       preparation; both names returned 404 and must be checked once more before
       the tag is pushed.
-- [ ] Pending publishers for both packages are configured against `ci.yml` and
-      the `pypi` environment before the tag is pushed.
-- [x] PyPI trusted publishing is implemented; no long-lived upload token is
-      stored.
+- [x] The `agent-packet` pending publisher targets repository
+      `mauricemohr88-debug/agent-trust-kit`, workflow `ci.yml`, and environment
+      `pypi`.
+- [x] The `agent-receipt` pending publisher targets repository
+      `mauricemohr88-debug/agent-trust-kit`, workflow `ci.yml`, and environment
+      `pypi-agent-receipt`.
+- [x] Both publishing jobs use job-scoped OIDC; no long-lived PyPI upload token
+      is stored.
 
 ## Release decision
 
