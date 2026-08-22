@@ -71,8 +71,10 @@ problem that software can remove.
 1. Finish threat models, archive and receipt recheck hardening.
 2. Make test, lint, build, package-content, and end-to-end gates reproducible.
 3. Dogfood one non-sensitive Hermes-to-worker handoff.
-4. Give the release candidate to two operators and fix onboarding friction.
-5. Publish only after the release checklist is green and Maurice approves it.
+4. Publish `v0.1.0` as an explicitly early beta after technical checks and
+   Maurice's approval, while keeping the missing outside validation visible.
+5. Give the beta to two operators and fix onboarding friction before describing
+   the quick start as independently validated.
 6. Contact ten to fifteen relevant agent operators personally with the founding
    pilot, focusing on their workflow rather than broadcasting generic promotion.
 7. Deliver the first pilot manually and record repeated work before automating it.

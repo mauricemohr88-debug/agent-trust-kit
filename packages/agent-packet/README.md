@@ -16,8 +16,19 @@ No network required. MIT. Python 3.10+.
 ## Install
 
 ```bash
+uv tool install agent-packet
+```
+
+Or with `pipx`:
+
+```bash
+pipx install agent-packet
+```
+
+For contributors working from this repository:
+
+```bash
 uv tool install ./packages/agent-packet
-# for contributors working inside the package:
 pip install -e "./packages/agent-packet[dev]"
 ```
 

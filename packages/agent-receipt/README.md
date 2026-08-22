@@ -3,7 +3,19 @@
 Offline claim-to-evidence receipts for agent handoffs. A receipt records what was
 observed; it is not proof that an agent's claim is true.
 
-Install the unpublished working copy with:
+## Install
+
+```bash
+uv tool install agent-receipt
+```
+
+Or with `pipx`:
+
+```bash
+pipx install agent-receipt
+```
+
+For contributors working from this repository:
 
 ```bash
 uv tool install ./packages/agent-receipt

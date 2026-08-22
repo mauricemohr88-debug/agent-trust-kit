@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
     branches: [main]
 
@@ -33,16 +34,22 @@ jobs:
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           version: "0.12.1"
-          enable-cache: true
+          enable-cache: false
 
       - name: Install Python
-        run: uv python install "${{ matrix.python-version }}"
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+        run: uv python install "$PYTHON_VERSION"
 
       - name: Sync workspace
-        run: uv sync --all-packages --group dev --python "${{ matrix.python-version }}" --locked
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+        run: uv sync --all-packages --group dev --python "$PYTHON_VERSION" --locked
 
       - name: Test
-        run: uv run --python "${{ matrix.python-version }}" pytest -q
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+        run: uv run --python "$PYTHON_VERSION" pytest -q
 
       - name: Lint
         if: matrix.python-version == '3.11'
@@ -67,12 +74,25 @@ jobs:
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           version: "0.12.1"
-          enable-cache: true
+          enable-cache: false
 
       - name: Build packages
         run: |
           uv build packages/agent-packet --out-dir dist/agent-packet
           uv build packages/agent-receipt --out-dir dist/agent-receipt
+
+      - name: Verify release version
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: |
+          release_version="${GITHUB_REF_NAME#v}"
+          packet_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' packages/agent-packet/pyproject.toml | head -n 1)"
+          receipt_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' packages/agent-receipt/pyproject.toml | head -n 1)"
+          plugin_version="$(sed -n 's/^version: "\([^"]*\)"/\1/p' plugin.yaml | head -n 1)"
+          test -n "$release_version"
+          test "$release_version" = "$packet_version"
+          test "$release_version" = "$receipt_version"
+          test "$release_version" = "$plugin_version"
 
       - name: Check package metadata
         run: uvx --from twine==6.2.0 twine check dist/*/*
@@ -84,3 +104,110 @@ jobs:
             dist/agent-packet/*.whl dist/agent-receipt/*.whl
           .package-smoke/bin/agent-packet --version
           .package-smoke/bin/agent-receipt --version
+
+      - name: Create distribution checksums
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: |
+          cd dist
+          find agent-packet agent-receipt -type f \
+            \( -name '*.whl' -o -name '*.tar.gz' \) -print0 \
+            | sort -z | xargs -0 sha256sum > SHA256SUMS
+
+      - name: Store release distributions
+        if: github.ref_type == 'tag'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: python-package-distributions
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+  publish_agent_packet:
+    name: Publish agent-packet to PyPI
+    if: github.ref_type == 'tag'
+    needs: [test, packages]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: pypi
+    permissions:
+      id-token: write # Exchanges GitHub's short-lived OIDC identity for PyPI access.
+
+    steps:
+      - name: Retrieve release distributions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: python-package-distributions
+          path: dist
+
+      - name: Publish agent-packet
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          packages-dir: dist/agent-packet
+          skip-existing: true
+
+  publish_agent_receipt:
+    name: Publish agent-receipt to PyPI
+    if: github.ref_type == 'tag'
+    needs: [test, packages]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: pypi
+    permissions:
+      id-token: write # Exchanges GitHub's short-lived OIDC identity for PyPI access.
+
+    steps:
+      - name: Retrieve release distributions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: python-package-distributions
+          path: dist
+
+      - name: Publish agent-receipt
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          packages-dir: dist/agent-receipt
+          skip-existing: true
+
+  github_release:
+    name: Publish GitHub release
+    if: github.ref_type == 'tag'
+    needs: [packages, publish_agent_packet, publish_agent_receipt]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # Creates the tagged release and attaches verified distributions.
+
+    steps:
+      - name: Check out release notes
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Retrieve release distributions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: python-package-distributions
+          path: dist
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          assets=(
+            dist/agent-packet/*.whl
+            dist/agent-packet/*.tar.gz
+            dist/agent-receipt/*.whl
+            dist/agent-receipt/*.tar.gz
+            dist/SHA256SUMS
+          )
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
+              --verify-tag \
+              --title "Agent Trust Kit $GITHUB_REF_NAME" \
+              --notes-file docs/RELEASE_NOTES_v0.1.0.md
+          fi

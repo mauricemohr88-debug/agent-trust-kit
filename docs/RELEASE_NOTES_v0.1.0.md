@@ -1,4 +1,7 @@
-# Draft v0.1.0 release notes
+# Agent Trust Kit v0.1.0
+
+This is the first public beta release. External operator feedback is still being
+collected and is not represented as completed validation.
 
 Agent Trust Kit makes AI-agent handoffs narrower and easier to inspect:
 explicitly select the input, record claims and evidence on return, and let the
@@ -24,9 +27,10 @@ automatically.
 
 ## Validation
 
-At source publication, the repository passed locally:
+The release candidate passed locally:
 
-- 81 tests on each of Python 3.10, 3.11, 3.12, 3.13, and 3.14;
+- 94 tests, with the same suite also green in GitHub's Python 3.10, 3.11,
+  3.12, 3.13, and 3.14 matrix;
 - Ruff lint and formatting checks;
 - source and wheel builds plus `twine check`;
 - fresh-environment wheel-install and CLI smoke tests;
@@ -57,10 +61,15 @@ transfers, unrestricted terminal access, and a compromised host remain outside
 its boundary. Read the [threat model](../THREAT_MODEL.md) before using it with
 private work.
 
-## Availability
+## Availability and open validation
 
-The source repository is public, but `v0.1.0` has not yet been tagged as a
-GitHub release and `agent-packet` and `agent-receipt` are not yet published on
-PyPI. A real non-sensitive dogfood workflow and feedback from outside testers
-were release gates. Dogfooding is now complete; feedback from two outside
-testers still remains before a formal release decision.
+- The native Hermes plugin installs from the tagged GitHub repository.
+- `agent-packet` and `agent-receipt` install independently from PyPI.
+- Release distributions are built from the tag, checked, published with
+  short-lived GitHub OIDC credentials, and attached to the GitHub release.
+
+One real non-sensitive workflow has been dogfooded. Feedback from two outside
+testers remains open in
+[issue #3](https://github.com/mauricemohr88-debug/agent-trust-kit/issues/3).
+Maurice approved publishing `v0.1.0` as an early beta on 2026-08-22 with that
+limitation kept visible; the missing feedback is not treated as evidence.

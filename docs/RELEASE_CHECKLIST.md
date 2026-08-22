@@ -41,16 +41,23 @@
 - [x] Public `main` CI and CodeQL completed successfully after source publication.
 - [x] Public GitHub repository name and CLI names checked immediately before
       source publication.
-- [ ] PyPI distribution names checked immediately before package publication.
-- [ ] PyPI trusted publishing is used; no long-lived upload token is stored.
+- [x] PyPI distribution names checked on 2026-08-22 immediately before release
+      preparation; both names returned 404 and must be checked once more before
+      the tag is pushed.
+- [ ] Pending publishers for both packages are configured against `ci.yml` and
+      the `pypi` environment before the tag is pushed.
+- [x] PyPI trusted publishing is implemented; no long-lived upload token is
+      stored.
 
 ## Release decision
 
 - [x] One real but non-sensitive workflow has been dogfooded and recorded.
 - [ ] At least two outside testers can follow the quick start without help.
+- [x] Maurice approved `v0.1.0` on 2026-08-22 as an early public beta while the
+      outside-tester goal remains visibly open in issue #3.
 - [x] Native Hermes plugin installation and a synthetic return have been tested
       from a clean user-plugin directory on a supported Hermes release.
 - [x] Open security blockers are zero.
 - [x] Maurice explicitly approves public GitHub source publication.
 - [x] Public GitHub source repository published.
-- [ ] Maurice explicitly approves PyPI package publication.
+- [x] Maurice explicitly approves PyPI package publication on 2026-08-22.
