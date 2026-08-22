@@ -57,5 +57,7 @@ scripts/check.sh
 - This is not a penetration test, certification, sandbox, DLP system, or guarantee
   that heuristic secret detection finds every sensitive value.
 
-Formal release and public package publication therefore remain subject to the
-[release checklist](RELEASE_CHECKLIST.md) and Maurice's explicit approval.
+Maurice approved `v0.1.0` as an early public beta on 2026-08-22. The missing
+outside feedback remains a disclosed beta-validation goal rather than a claimed
+test result; release mechanics remain subject to the
+[release checklist](RELEASE_CHECKLIST.md).

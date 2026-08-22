@@ -11,6 +11,8 @@ and recheck evidence before you trust or merge it.**
 [![CodeQL](https://github.com/mauricemohr88-debug/agent-trust-kit/actions/workflows/codeql.yml/badge.svg)](https://github.com/mauricemohr88-debug/agent-trust-kit/actions/workflows/codeql.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-55e6a5.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-36d9ff.svg)](pyproject.toml)
+[![agent-packet on PyPI](https://img.shields.io/pypi/v/agent-packet.svg?label=agent-packet)](https://pypi.org/project/agent-packet/)
+[![agent-receipt on PyPI](https://img.shields.io/pypi/v/agent-receipt.svg?label=agent-receipt)](https://pypi.org/project/agent-receipt/)
 
 Delegating code is easy. Keeping the handoff narrow—and deciding whether the
 returned result deserves trust—is the hard part. Agent Trust Kit gives the
@@ -39,6 +41,17 @@ trusted controller -> independent checks -> accept or reject
 - [Review the local validation record](docs/LOCAL_VALIDATION.md)
 - [Read the first native Hermes dogfood record](docs/DOGFOOD_2026-08-03.md)
 - [Review the isolated Hermes v0.20.0 compatibility check](docs/COMPATIBILITY_2026-08-05.md)
+
+## Install the Python tools
+
+```bash
+uv tool install agent-packet
+uv tool install agent-receipt
+```
+
+The tools are separate commands so a controller or worker can install only the
+boundary it needs. `pipx install agent-packet` and `pipx install agent-receipt`
+are equivalent alternatives.
 
 The source repository is public. The tools
 reduce common handoff mistakes; they do not send packets, sandbox workers,
@@ -108,15 +121,18 @@ release and support cycles.
 
 ## Status
 
-- The public source repository is live; `agent-packet` and `agent-receipt` are
-  not yet published on PyPI.
+- `v0.1.0` is the first public beta for the native Hermes plugin,
+  `agent-packet`, and `agent-receipt`. Tagged releases publish the two Python
+  tools through PyPI Trusted Publishing without a stored upload token.
 - Local lint, the Python 3.10–3.14 test matrix, package builds, wheel-install
   smoke, and the end-to-end handoff are green; see the
   [local validation record](docs/LOCAL_VALIDATION.md).
 - GitHub CI and CodeQL are green on the public `main` branch. One real
   non-sensitive native Hermes workflow has now been dogfooded; see the
   [recorded result](docs/DOGFOOD_2026-08-03.md). Feedback from two outside
-  testers and separate PyPI approval remain before public package publication.
+  testers remains an open beta-validation goal tracked in
+  [issue #3](https://github.com/mauricemohr88-debug/agent-trust-kit/issues/3);
+  it is not presented as completed evidence.
 - An isolated compatibility check against Hermes v0.20.0 (official tag
   `v2026.8.3`) passed the plugin-load and focused smoke coverage; it is not a
   claim that this repository has been live-upgraded. See the
