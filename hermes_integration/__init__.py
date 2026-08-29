@@ -7,7 +7,7 @@ from typing import Any
 
 from .bootstrap import ensure_repo_local_core
 from .cli import handle_cli, setup_cli
-from .core import TrustError, TrustRuntime
+from .core import TrustError, TrustRuntime, require_supported_native_platform
 from .schemas import PREPARE_SCHEMA, STATUS_SCHEMA, VERIFY_SCHEMA
 
 
@@ -39,6 +39,7 @@ def _tool_handler(runtime: TrustRuntime, operation: str):
 def register(ctx: Any) -> None:
     """Register native tools, the operator CLI, and a narrow egress hook."""
 
+    require_supported_native_platform()
     ensure_repo_local_core()
     from hermes_constants import get_hermes_home
 

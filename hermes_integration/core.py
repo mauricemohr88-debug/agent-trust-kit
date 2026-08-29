@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
 import os
@@ -12,12 +11,18 @@ import shutil
 import signal
 import stat
 import subprocess
+import sys
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - exercised by the Windows CI boundary job
+    fcntl = None  # type: ignore[assignment]
 
 from .bootstrap import ensure_repo_local_core
 
@@ -48,6 +53,10 @@ _PRIVATE_REFERENCE = re.compile(
     r"\.env(?:\.[^\\/\s]+)?|\.netrc|\.npmrc|\.pypirc|credentials\.json|"
     r"id_(?:rsa|dsa|ecdsa|ed25519)|[^\\/\s]+\.(?:pem|p12|pfx|key))(?:$|[\\/\s])"
 )
+NATIVE_PLATFORM_ERROR = (
+    "Agent Trust Kit's native Hermes plugin supports macOS and Linux only; "
+    "this native platform is not supported."
+)
 
 
 class TrustError(Exception):
@@ -57,6 +66,24 @@ class TrustError(Exception):
         super().__init__(public_message)
         self.code = code
         self.public_message = public_message
+
+
+def _native_platform() -> str:
+    return sys.platform
+
+
+def require_supported_native_platform() -> None:
+    """Fail before native plugin state or registrations touch an unsupported host."""
+
+    platform = _native_platform()
+    if platform == "darwin" or platform.startswith("linux"):
+        if fcntl is None:
+            raise TrustError(
+                "unsupported_platform_backend",
+                "The secure native platform backend is unavailable on this host.",
+            )
+        return
+    raise TrustError("unsupported_platform", NATIVE_PLATFORM_ERROR)
 
 
 def _now() -> str:
@@ -156,10 +183,26 @@ def _file_signature(info: os.stat_result) -> tuple[int, ...]:
     )
 
 
+def _terminate_posix_process_group(process: subprocess.Popen[bytes]) -> None:
+    """Terminate a POSIX process group without assuming killpg exists elsewhere."""
+
+    if process.poll() is not None or os.name != "posix":
+        return
+    kill_group = getattr(os, "killpg", None)
+    sigkill = getattr(signal, "SIGKILL", None)
+    if kill_group is None or sigkill is None:
+        return
+    try:
+        kill_group(process.pid, sigkill)
+    except ProcessLookupError:
+        return
+
+
 class TrustRuntime:
     """Own private policy, packet, approval, and quarantine state."""
 
     def __init__(self, hermes_home: str | Path) -> None:
+        require_supported_native_platform()
         self.hermes_home = Path(hermes_home).expanduser().resolve(strict=True)
         if not self.hermes_home.is_dir():
             raise RuntimeError("Hermes home must be a directory")
@@ -359,12 +402,9 @@ class TrustRuntime:
         output_exceeded = threading.Event()
 
         def terminate() -> None:
-            if process is None or process.poll() is not None:
+            if process is None:
                 return
-            try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                return
+            _terminate_posix_process_group(process)
 
         try:
             process = subprocess.Popen(  # noqa: S603
@@ -611,6 +651,8 @@ class TrustRuntime:
 
     @contextmanager
     def _handoff_lock(self, handoff_id: Any) -> Iterator[None]:
+        if fcntl is None:
+            raise TrustError("unsupported_platform", NATIVE_PLATFORM_ERROR)
         _identifier, directory = self._handoff_dir(handoff_id)
         if not directory.is_dir() or directory.is_symlink():
             raise TrustError("handoff_not_found", "No such handoff exists.")
