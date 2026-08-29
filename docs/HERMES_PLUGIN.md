@@ -45,6 +45,25 @@ For local development, a committed working copy can be installed with
 `hermes plugins install file:///absolute/path/to/agent-trust-kit --enable`.
 The local Git installer clones committed files only.
 
+## Platform support
+
+The native Hermes plugin supports macOS and Linux. Python 3.10+ compatibility
+describes the interpreter versions covered by the project; it does not extend
+the native plugin's OS support. On native Windows the module can be imported,
+but registration and runtime construction fail immediately with a stable
+unsupported-platform error, before tools, hooks, CLI commands, subprocesses, or
+private state are created.
+
+Native Windows needs a dedicated backend for the plugin's secure
+descriptor-relative, no-follow traversal and private-state semantics. Those
+controls are not replaced with weaker path checks, and `plugin.yaml` therefore
+continues to list only macOS and Linux.
+
+Hashes in packets, receipts, and output manifests cover exact file bytes. A
+separately selected Windows worker or transfer that rewrites LF line endings to
+CRLF changes those bytes and will cause the relevant digest check to fail.
+Configure checkouts and transfers to preserve bytes.
+
 ## Typical controller flow
 
 1. Register the project once with `project add`. The path must be a Git working
@@ -102,7 +121,7 @@ only narrow defense-in-depth for selected delegation/message calls; it is not a
 complete transport gate, and Hermes plugin hooks must not be treated as a
 kernel-enforced boundary. In particular, the CLI records operator intent but
 does not authenticate a human against another process running as the same macOS
-user; an unrestricted terminal tool can invoke or bypass it. Use least-privilege
+or Linux user; an unrestricted terminal tool can invoke or bypass it. Use least-privilege
 credentials, an isolated worker, restricted controller tools, and an
 OS/container sandbox for untrusted code.
 

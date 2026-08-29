@@ -23,6 +23,18 @@ Observed in the isolated test environment:
 Hermes v0.20.0 officially requires Node 26; that runtime requirement applies
 when reproducing this v0.20.0 compatibility check.
 
+## OS support boundary
+
+This Hermes-version record is separate from operating-system support and from
+the Python 3.10-3.14 interpreter matrix. The native plugin supports macOS and
+Linux only. Native Windows remains unsupported because its secure
+descriptor-relative, no-follow traversal and private-state semantics require a
+dedicated backend; this record is not Windows compatibility evidence.
+
+Packet, receipt, and output-manifest digests are byte-exact. If a separately
+selected Windows worker or transfer path converts LF line endings to CRLF, the
+resulting bytes and hashes differ, so the affected verification fails closed.
+
 ## Interpretation and limits
 
 The observed results support compatibility for the tested plugin installation,

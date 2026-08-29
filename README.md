@@ -60,7 +60,9 @@ a worker was honest, or merge returned changes automatically.
 
 ## Development
 
-Requirements: Python 3.10+ and [uv](https://docs.astral.sh/uv/).
+Requirements: Python 3.10+ and [uv](https://docs.astral.sh/uv/). The Python
+version matrix is not an operating-system support claim: the native Hermes
+plugin currently supports macOS and Linux only.
 
 ```bash
 uv sync --all-packages --group dev
@@ -87,6 +89,12 @@ Verification uses a fixed private quarantine, requires
 `OUTPUT_MANIFEST.json` plus `receipt.json`, performs a full recheck without
 executing worker commands, and never merges automatically.
 
+The native plugin supports macOS and Linux. It imports on native Windows so
+Hermes can report a deterministic support error, but it does not activate
+there. Secure descriptor-relative, no-follow traversal and private-state
+semantics need a dedicated Windows backend before native Windows can be
+supported; the manifest intentionally remains limited to macOS and Linux.
+
 Install the public repository with:
 
 ```bash
@@ -99,6 +107,11 @@ The plugin is not a global egress gate or OS sandbox. Other Hermes tools, manual
 transfers, unrestricted same-user terminal access, and a compromised host remain
 outside its boundary. Read [the plugin guide](docs/HERMES_PLUGIN.md) and the
 [threat model](THREAT_MODEL.md) before using it with private work.
+
+Packet, receipt, and output-manifest hashes are byte-exact. If a separately
+selected Windows worker or transfer path rewrites LF line endings to CRLF, the
+changed bytes will not match the recorded digest. Preserve file bytes across
+checkouts and transfers.
 
 ## Want help applying this to a real workflow?
 

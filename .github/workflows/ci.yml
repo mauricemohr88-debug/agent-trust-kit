@@ -59,6 +59,35 @@ jobs:
         if: matrix.python-version == '3.11'
         run: uv run ruff format --config pyproject.toml --check .
 
+  windows_boundary:
+    name: Native Windows support boundary
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.12.1"
+          enable-cache: false
+
+      - name: Install Python
+        run: uv python install 3.11
+
+      - name: Sync workspace
+        run: uv sync --all-packages --group dev --python 3.11 --locked
+
+      - name: Import native integration
+        run: uv run --python 3.11 python -c "import hermes_integration; import hermes_integration.core"
+
+      - name: Test Windows support boundary
+        run: uv run --python 3.11 pytest -q tests/test_windows_boundary.py
+
   packages:
     name: Build distributions
     runs-on: ubuntu-latest
