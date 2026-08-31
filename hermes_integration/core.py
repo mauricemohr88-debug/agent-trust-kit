@@ -215,10 +215,13 @@ def _file_signature(info: os.stat_result) -> tuple[int, ...]:
     )
 
 
-def _terminate_posix_process_group(process: subprocess.Popen[bytes]) -> None:
+def _terminate_posix_process_group(
+    process: subprocess.Popen[bytes], *, platform_name: str | None = None
+) -> None:
     """Terminate a POSIX process group without assuming killpg exists elsewhere."""
 
-    if process.poll() is not None or os.name != "posix":
+    selected_platform = os.name if platform_name is None else platform_name
+    if process.poll() is not None or selected_platform != "posix":
         return
     kill_group = getattr(os, "killpg", None)
     sigkill = getattr(signal, "SIGKILL", None)

@@ -90,10 +90,11 @@ def test_non_posix_cleanup_does_not_call_killpg(monkeypatch: pytest.MonkeyPatch)
         nonlocal called
         called = True
 
-    monkeypatch.setattr(core.os, "name", "nt")
     monkeypatch.setattr(core.os, "killpg", unexpected_killpg, raising=False)
 
-    core._terminate_posix_process_group(_RunningProcess())  # type: ignore[arg-type]
+    core._terminate_posix_process_group(  # type: ignore[arg-type]
+        _RunningProcess(), platform_name="nt"
+    )
 
     assert called is False
 
@@ -101,7 +102,6 @@ def test_non_posix_cleanup_does_not_call_killpg(monkeypatch: pytest.MonkeyPatch)
 def test_posix_cleanup_keeps_process_group_behavior(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[int, Any]] = []
     synthetic_sigkill = getattr(core.signal, "SIGKILL", 9)
-    monkeypatch.setattr(core.os, "name", "posix")
     monkeypatch.setattr(
         core.os,
         "killpg",
@@ -110,7 +110,9 @@ def test_posix_cleanup_keeps_process_group_behavior(monkeypatch: pytest.MonkeyPa
     )
     monkeypatch.setattr(core.signal, "SIGKILL", synthetic_sigkill, raising=False)
 
-    core._terminate_posix_process_group(_RunningProcess())  # type: ignore[arg-type]
+    core._terminate_posix_process_group(  # type: ignore[arg-type]
+        _RunningProcess(), platform_name="posix"
+    )
 
     assert calls == [(4242, synthetic_sigkill)]
 

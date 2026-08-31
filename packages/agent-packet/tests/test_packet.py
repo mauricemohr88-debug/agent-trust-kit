@@ -4,6 +4,7 @@ import hashlib
 import io
 import json
 import math
+import sys
 import tarfile
 from pathlib import Path
 
@@ -236,6 +237,10 @@ def test_sensitive_path_components_are_denied_at_every_depth(tmp_path: Path):
     assert all(component not in manifest_text for component in components)
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Windows rejects control characters before the packet scanner can inspect them",
+)
 def test_control_character_filename_is_omitted(tmp_path: Path):
     root = tmp_path / "ws"
     root.mkdir()

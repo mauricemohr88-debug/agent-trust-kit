@@ -411,8 +411,14 @@ def evidence_command(
         return Evidence("command", detail, False, {"error": type(exc).__name__})
 
 
-def _terminate_process(proc: subprocess.Popen[bytes], *, descendants_observed: bool = True) -> bool:
-    if os.name == "posix":
+def _terminate_process(
+    proc: subprocess.Popen[bytes],
+    *,
+    descendants_observed: bool = True,
+    platform_name: str | None = None,
+) -> bool:
+    selected_platform = os.name if platform_name is None else platform_name
+    if selected_platform == "posix":
         try:
             os.killpg(proc.pid, signal.SIGKILL)
             return True
@@ -422,7 +428,7 @@ def _terminate_process(proc: subprocess.Popen[bytes], *, descendants_observed: b
         except OSError:
             if not descendants_observed and proc.poll() is not None:
                 return True
-    if os.name == "nt":
+    if selected_platform == "nt":
         try:
             result = subprocess.run(  # noqa: S603 -- absolute trusted system executable
                 [

@@ -239,7 +239,11 @@ def test_duplicate_command_evidence_is_rejected(tmp_path: Path):
 
 def test_command_output_limit_fails_without_storing_output(tmp_path: Path):
     evidence = evidence_command(
-        [sys.executable, "-c", "import sys; sys.stdout.write('x' * 70000)"],
+        [
+            sys.executable,
+            "-c",
+            ("import sys,time; sys.stdout.write('x' * 70000); sys.stdout.flush(); time.sleep(30)"),
+        ],
         workspace_root=tmp_path,
     )
     assert evidence.ok is False
@@ -266,7 +270,6 @@ def test_posix_missing_group_does_not_confirm_observed_descendant_cleanup(
     def missing_group(*_args):
         raise ProcessLookupError
 
-    monkeypatch.setattr(receipt_core.os, "name", "posix")
     monkeypatch.setattr(
         receipt_core.os,
         "killpg",
@@ -274,7 +277,12 @@ def test_posix_missing_group_does_not_confirm_observed_descendant_cleanup(
         raising=False,
     )
 
-    assert receipt_core._terminate_process(ExitedProcess()) is False  # type: ignore[arg-type]
+    assert (
+        receipt_core._terminate_process(  # type: ignore[arg-type]
+            ExitedProcess(), platform_name="posix"
+        )
+        is False
+    )
 
 
 def test_windows_exited_parent_without_taskkill_confirmation_fails_closed(
@@ -295,7 +303,6 @@ def test_windows_exited_parent_without_taskkill_confirmation_fails_closed(
         calls.append(command)
         return subprocess.CompletedProcess(command, 1)
 
-    monkeypatch.setattr(receipt_core.os, "name", "nt")
     monkeypatch.setattr(
         receipt_core,
         "_trusted_windows_taskkill_path",
@@ -303,7 +310,12 @@ def test_windows_exited_parent_without_taskkill_confirmation_fails_closed(
     )
     monkeypatch.setattr(receipt_core.subprocess, "run", fake_run)
 
-    assert receipt_core._terminate_process(ExitedProcess()) is False  # type: ignore[arg-type]
+    assert (
+        receipt_core._terminate_process(  # type: ignore[arg-type]
+            ExitedProcess(), platform_name="nt"
+        )
+        is False
+    )
     assert calls == [[r"C:\Windows\System32\taskkill.exe", "/PID", "4242", "/T", "/F"]]
 
 
@@ -328,7 +340,6 @@ def test_windows_termination_uses_trusted_taskkill_for_process_tree(
         calls.append((command, kwargs))
         return subprocess.CompletedProcess(command, 0)
 
-    monkeypatch.setattr(receipt_core.os, "name", "nt")
     monkeypatch.setattr(
         receipt_core,
         "_trusted_windows_taskkill_path",
@@ -336,7 +347,9 @@ def test_windows_termination_uses_trusted_taskkill_for_process_tree(
     )
     monkeypatch.setattr(receipt_core.subprocess, "run", fake_run)
 
-    cleanup_confirmed = receipt_core._terminate_process(process)  # type: ignore[arg-type]
+    cleanup_confirmed = receipt_core._terminate_process(  # type: ignore[arg-type]
+        process, platform_name="nt"
+    )
 
     assert calls[0][0] == [
         r"C:\Windows\System32\taskkill.exe",
@@ -368,7 +381,6 @@ def test_windows_termination_falls_back_to_direct_kill(
             self.killed = True
 
     process = RunningProcess()
-    monkeypatch.setattr(receipt_core.os, "name", "nt")
     monkeypatch.setattr(
         receipt_core,
         "_trusted_windows_taskkill_path",
@@ -380,7 +392,9 @@ def test_windows_termination_falls_back_to_direct_kill(
         lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 1),
     )
 
-    cleanup_confirmed = receipt_core._terminate_process(process)  # type: ignore[arg-type]
+    cleanup_confirmed = receipt_core._terminate_process(  # type: ignore[arg-type]
+        process, platform_name="nt"
+    )
 
     assert cleanup_confirmed is False
     assert process.killed is True
