@@ -775,7 +775,9 @@ def _tail_is_zero_filled(source: Path, offset: int) -> bool:
     return True
 
 
-def _read_verified_tar(source: Path, output_dir: Path | None = None) -> dict[str, Any]:
+def _read_verified_tar_details(
+    source: Path, output_dir: Path | None = None
+) -> tuple[dict[str, Any], str]:
     """Parse a size-bounded, already decompressed tar snapshot."""
     try:
         tar = tarfile.open(source, "r:", tarinfo=_BoundedTarInfo)
@@ -787,6 +789,7 @@ def _read_verified_tar(source: Path, output_dir: Path | None = None) -> dict[str
         expected: set[str] | None = None
         expected_entries: dict[str, dict[str, Any]] = {}
         manifest: dict[str, Any] | None = None
+        manifest_sha256: str | None = None
         for count, member in enumerate(tar, start=1):
             if count > MAX_MEMBERS:
                 raise ValueError("archive has too many members")
@@ -812,6 +815,7 @@ def _read_verified_tar(source: Path, output_dir: Path | None = None) -> dict[str
                     manifest = _validate_manifest(loaded)
                 except (UnicodeError, ValueError, RecursionError) as exc:
                     raise ValueError("manifest.json is invalid") from exc
+                manifest_sha256 = _sha256_bytes(data)
                 expected_entries = {"payload/" + item["path"]: item for item in manifest["files"]}
                 expected = {"manifest.json", *expected_entries}
             elif manifest is None:
@@ -826,17 +830,28 @@ def _read_verified_tar(source: Path, output_dir: Path | None = None) -> dict[str
                 target = output_dir.joinpath(*PurePosixPath(name).parts)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(data)
-        if manifest is None or expected != names:
+        if manifest is None or manifest_sha256 is None or expected != names:
             raise ValueError("archive files do not exactly match manifest")
         tail_offset = tar.offset
     if not _tail_is_zero_filled(source, tail_offset):
         raise ValueError("archive contains non-zero data after its final member")
-    return manifest
+    return manifest, manifest_sha256
+
+
+def _read_verified_tar(source: Path, output_dir: Path | None = None) -> dict[str, Any]:
+    return _read_verified_tar_details(source, output_dir)[0]
 
 
 def _read_verified_archive(source: Path, output_dir: Path | None = None) -> dict[str, Any]:
     try:
         return _read_verified_tar(source, output_dir)
+    except tarfile.TarError as exc:
+        raise ValueError("packet has an invalid tar structure") from exc
+
+
+def _read_verified_archive_details(source: Path) -> tuple[dict[str, Any], str]:
+    try:
+        return _read_verified_tar_details(source)
     except tarfile.TarError as exc:
         raise ValueError("packet has an invalid tar structure") from exc
 
@@ -930,11 +945,25 @@ def _fresh_destination(dest: Path) -> Path:
     return canonical
 
 
-def inspect_packet(packet: Path) -> tuple[dict[str, Any], str | None]:
+def inspect_packet_details(packet: Path) -> dict[str, Any]:
+    """Return a verified manifest plus exact archive and manifest-member hashes."""
+
     source = Path(os.path.abspath(os.fspath(packet)))
     with tempfile.TemporaryDirectory(prefix=".agent-packet-inspect-") as temporary:
         archive, archive_hash = _prepare_snapshot(source, Path(temporary))
-        return _read_verified_archive(archive), archive_hash
+        manifest, manifest_sha256 = _read_verified_archive_details(archive)
+        return {
+            "manifest": manifest,
+            "archive_sha256": archive_hash,
+            "manifest_sha256": manifest_sha256,
+        }
+
+
+def inspect_packet(packet: Path) -> tuple[dict[str, Any], str | None]:
+    """Return the original two-item inspection result for API compatibility."""
+
+    details = inspect_packet_details(packet)
+    return details["manifest"], details["archive_sha256"]
 
 
 def materialize_packet(

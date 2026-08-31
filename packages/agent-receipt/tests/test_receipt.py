@@ -1,17 +1,23 @@
 from __future__ import annotations
 
+import io
 import json
 import os
+import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
+import agent_receipt.core as receipt_core
 from agent_receipt import output_manifest
 from agent_receipt.cli import main
 from agent_receipt.core import (
+    UNBOUND_RECEIPT_WARNING,
     Claim,
     build_receipt,
     evidence_command,
@@ -140,6 +146,7 @@ def test_file_hash_recheck_detects_change(tmp_path: Path):
     result = verify_receipt(receipt, recheck=True, recheck_root=tmp_path)
     assert result["hash_ok"] is True
     assert result["recomputed_overall_ok"] is False
+    assert result["warnings"] == []
 
 
 def test_command_recheck_needs_root_exact_allowlist_and_ignores_forged_cwd(
@@ -239,6 +246,370 @@ def test_command_output_limit_fails_without_storing_output(tmp_path: Path):
     assert evidence.observed == {"error": "OutputLimitExceeded"}
 
 
+def test_process_group_options_preserve_posix_and_isolate_windows_commands():
+    assert receipt_core._process_group_options("posix") == {"start_new_session": True}
+    assert receipt_core._process_group_options("nt") == {
+        "creationflags": receipt_core._WINDOWS_CREATE_NEW_PROCESS_GROUP
+    }
+
+
+def test_posix_missing_group_does_not_confirm_observed_descendant_cleanup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+
+    class ExitedProcess:
+        pid = 4242
+
+        def poll(self):
+            return 0
+
+    def missing_group(*_args):
+        raise ProcessLookupError
+
+    monkeypatch.setattr(receipt_core.os, "name", "posix")
+    monkeypatch.setattr(
+        receipt_core.os,
+        "killpg",
+        missing_group,
+        raising=False,
+    )
+
+    assert receipt_core._terminate_process(ExitedProcess()) is False  # type: ignore[arg-type]
+
+
+def test_windows_exited_parent_without_taskkill_confirmation_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[list[str]] = []
+
+    class ExitedProcess:
+        pid = 4242
+
+        def poll(self):
+            return 0
+
+        def kill(self):
+            pytest.fail("an exited direct process cannot confirm descendant cleanup")
+
+    def fake_run(command, **_kwargs):
+        calls.append(command)
+        return subprocess.CompletedProcess(command, 1)
+
+    monkeypatch.setattr(receipt_core.os, "name", "nt")
+    monkeypatch.setattr(
+        receipt_core,
+        "_trusted_windows_taskkill_path",
+        lambda: r"C:\Windows\System32\taskkill.exe",
+    )
+    monkeypatch.setattr(receipt_core.subprocess, "run", fake_run)
+
+    assert receipt_core._terminate_process(ExitedProcess()) is False  # type: ignore[arg-type]
+    assert calls == [[r"C:\Windows\System32\taskkill.exe", "/PID", "4242", "/T", "/F"]]
+
+
+def test_windows_termination_uses_trusted_taskkill_for_process_tree(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[list[str], dict]] = []
+
+    class RunningProcess:
+        pid = 4242
+        killed = False
+
+        def poll(self):
+            return None
+
+        def kill(self):
+            self.killed = True
+
+    process = RunningProcess()
+
+    def fake_run(command, **kwargs):
+        calls.append((command, kwargs))
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(receipt_core.os, "name", "nt")
+    monkeypatch.setattr(
+        receipt_core,
+        "_trusted_windows_taskkill_path",
+        lambda: r"C:\Windows\System32\taskkill.exe",
+    )
+    monkeypatch.setattr(receipt_core.subprocess, "run", fake_run)
+
+    cleanup_confirmed = receipt_core._terminate_process(process)  # type: ignore[arg-type]
+
+    assert calls[0][0] == [
+        r"C:\Windows\System32\taskkill.exe",
+        "/PID",
+        "4242",
+        "/T",
+        "/F",
+    ]
+    assert calls[0][1]["timeout"] == receipt_core.WINDOWS_TERMINATION_TIMEOUT
+    assert calls[0][1]["stdin"] == subprocess.DEVNULL
+    assert calls[0][1]["stdout"] == subprocess.DEVNULL
+    assert calls[0][1]["stderr"] == subprocess.DEVNULL
+    assert calls[0][1]["shell"] is False
+    assert cleanup_confirmed is True
+    assert process.killed is False
+
+
+def test_windows_termination_falls_back_to_direct_kill(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class RunningProcess:
+        pid = 4242
+        killed = False
+
+        def poll(self):
+            return None
+
+        def kill(self):
+            self.killed = True
+
+    process = RunningProcess()
+    monkeypatch.setattr(receipt_core.os, "name", "nt")
+    monkeypatch.setattr(
+        receipt_core,
+        "_trusted_windows_taskkill_path",
+        lambda: r"C:\Windows\System32\taskkill.exe",
+    )
+    monkeypatch.setattr(
+        receipt_core.subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 1),
+    )
+
+    cleanup_confirmed = receipt_core._terminate_process(process)  # type: ignore[arg-type]
+
+    assert cleanup_confirmed is False
+    assert process.killed is True
+
+
+def test_timeout_reports_unconfirmed_descendant_cleanup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class TimedOutProcess:
+        pid = 4242
+        stdout = io.BytesIO()
+        stderr = io.BytesIO()
+        waits = 0
+
+        def wait(self, timeout):
+            self.waits += 1
+            if self.waits == 1:
+                raise subprocess.TimeoutExpired([sys.executable], timeout)
+            return -1
+
+        def poll(self):
+            return None
+
+        def kill(self):
+            return None
+
+    process = TimedOutProcess()
+    monkeypatch.setattr(receipt_core.subprocess, "Popen", lambda *args, **kwargs: process)
+    monkeypatch.setattr(
+        receipt_core,
+        "_terminate_process",
+        lambda _process, **_kwargs: False,
+    )
+
+    evidence = evidence_command([sys.executable, "-c", "pass"], workspace_root=tmp_path)
+
+    assert evidence.observed == {"error": "TimeoutExpiredProcessTreeCleanupUnconfirmed"}
+
+
+def test_live_pipe_readers_fail_closed_instead_of_reporting_command_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    release = threading.Event()
+
+    class BlockingStream:
+        def read(self, _size):
+            release.wait()
+            return b""
+
+    class ExitedLauncher:
+        pid = 4242
+        stdout = BlockingStream()
+        stderr = BlockingStream()
+
+        def wait(self, timeout):
+            return 0
+
+        def poll(self):
+            return 0
+
+        def kill(self):
+            return None
+
+    launcher = ExitedLauncher()
+    monkeypatch.setattr(receipt_core, "COMMAND_READER_JOIN_TIMEOUT", 0.01)
+    monkeypatch.setattr(receipt_core.subprocess, "Popen", lambda *args, **kwargs: launcher)
+    monkeypatch.setattr(
+        receipt_core,
+        "_terminate_process",
+        lambda _process, **_kwargs: False,
+    )
+
+    evidence = evidence_command([sys.executable, "-c", "pass"], workspace_root=tmp_path)
+    release.set()
+
+    assert evidence.ok is False
+    assert evidence.observed == {"error": "ProcessTreeCleanupUnconfirmed"}
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="real Windows process-tree regression")
+def test_windows_command_timeout_terminates_descendants(tmp_path: Path) -> None:
+    marker = tmp_path / "descendant-survived.txt"
+    descendant = (
+        "import sys,time; from pathlib import Path; time.sleep(3); "
+        "Path(sys.argv[1]).write_text('survived', encoding='utf-8')"
+    )
+    parent = (
+        "import subprocess,sys,time; "
+        "subprocess.Popen([sys.executable, '-c', sys.argv[1], sys.argv[2]]); "
+        "time.sleep(30)"
+    )
+
+    evidence = evidence_command(
+        [sys.executable, "-c", parent, descendant, str(marker)],
+        workspace_root=tmp_path,
+        timeout=1,
+    )
+
+    assert evidence.observed == {"error": "TimeoutExpired"}
+    time.sleep(4)
+    assert not marker.exists()
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="real Windows process-tree regression")
+def test_windows_exited_launcher_with_live_descendant_fails_closed(tmp_path: Path) -> None:
+    marker = tmp_path / "exited-launcher-descendant.txt"
+    descendant = (
+        "import sys,time; from pathlib import Path; time.sleep(3); "
+        "Path(sys.argv[1]).write_text('survived', encoding='utf-8')"
+    )
+    launcher = (
+        "import subprocess,sys; subprocess.Popen([sys.executable, '-c', sys.argv[1], sys.argv[2]])"
+    )
+
+    evidence = evidence_command(
+        [sys.executable, "-c", launcher, descendant, str(marker)],
+        workspace_root=tmp_path,
+    )
+
+    assert evidence.ok is False
+    assert evidence.observed == {"error": "ProcessTreeCleanupUnconfirmed"}
+    time.sleep(4)
+    assert marker.read_text(encoding="utf-8") == "survived"
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="real Windows process-tree regression")
+def test_windows_command_output_limit_terminates_descendants(tmp_path: Path) -> None:
+    marker = tmp_path / "output-limit-descendant-survived.txt"
+    descendant = (
+        "import sys,time; from pathlib import Path; time.sleep(3); "
+        "Path(sys.argv[1]).write_text('survived', encoding='utf-8')"
+    )
+    parent = (
+        "import subprocess,sys,time; "
+        "subprocess.Popen([sys.executable, '-c', sys.argv[1], sys.argv[2]]); "
+        "sys.stdout.write('x' * 70000); sys.stdout.flush(); time.sleep(30)"
+    )
+
+    evidence = evidence_command(
+        [sys.executable, "-c", parent, descendant, str(marker)],
+        workspace_root=tmp_path,
+    )
+
+    assert evidence.observed == {"error": "OutputLimitExceeded"}
+    time.sleep(4)
+    assert not marker.exists()
+
+
+def test_successful_unbound_verification_warns_without_changing_semantics(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    artifact = tmp_path / "artifact.txt"
+    artifact.write_text("verified", encoding="utf-8")
+    receipt = _receipt(tmp_path, evidence_file_hash(artifact, workspace_root=tmp_path))
+    result = verify_receipt(receipt, recheck=True, recheck_root=tmp_path)
+
+    assert result["ok"] is True
+    assert result["authenticated"] is None
+    assert result["context_ok"] is True
+    assert result["assurance"] == "fully_rechecked"
+    assert result["warnings"] == [UNBOUND_RECEIPT_WARNING]
+
+    receipt_path = tmp_path / "receipt.json"
+    save_receipt(receipt, receipt_path)
+    assert (
+        main(
+            [
+                "verify",
+                str(receipt_path),
+                "--recheck",
+                "--recheck-root",
+                str(tmp_path),
+            ]
+        )
+        == 0
+    )
+    assert f"warning: {UNBOUND_RECEIPT_WARNING}" in capsys.readouterr().out
+
+
+def test_receipt_supplied_context_does_not_suppress_unbound_recheck_warning(
+    tmp_path: Path,
+) -> None:
+    artifact = tmp_path / "artifact.txt"
+    artifact.write_text("verified", encoding="utf-8")
+    context = {
+        "packet_digest": "a" * 64,
+        "input_commit": "d" * 40,
+        "output_manifest_digest": "b" * 64,
+    }
+    receipt = build_receipt(
+        agent="worker",
+        task="t",
+        workspace_root=tmp_path,
+        context=context,
+        claims=[Claim("a", "exists", [evidence_file_hash(artifact, workspace_root=tmp_path)])],
+    )
+
+    result = verify_receipt(receipt, recheck=True, recheck_root=tmp_path)
+
+    assert result["ok"] is True
+    assert result["warnings"] == [UNBOUND_RECEIPT_WARNING]
+
+
+def test_json_cli_emits_parseable_unbound_recheck_warning(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    artifact = tmp_path / "artifact.txt"
+    artifact.write_text("verified", encoding="utf-8")
+    receipt = _receipt(tmp_path, evidence_file_hash(artifact, workspace_root=tmp_path))
+    receipt_path = tmp_path / "receipt.json"
+    save_receipt(receipt, receipt_path)
+
+    assert (
+        main(
+            [
+                "verify",
+                str(receipt_path),
+                "--recheck",
+                "--recheck-root",
+                str(tmp_path),
+                "--json",
+            ]
+        )
+        == 0
+    )
+    result = json.loads(capsys.readouterr().out)
+    assert result["warnings"] == [UNBOUND_RECEIPT_WARNING]
+
+
 def test_context_is_strict_and_signature_authenticates_attribution(tmp_path: Path):
     artifact = tmp_path / "a.txt"
     artifact.write_text("x", encoding="utf-8")
@@ -264,12 +635,29 @@ def test_context_is_strict_and_signature_authenticates_attribution(tmp_path: Pat
         serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
     )
     sign_receipt(receipt, private_pem, "worker-1")
-    assert verify_receipt(receipt, trusted_keys={"worker-1": public_pem})["authenticated"] is True
+    authenticated = verify_receipt(
+        receipt,
+        trusted_keys={"worker-1": public_pem},
+        minimum_assurance="reported",
+    )
+    assert authenticated["authenticated"] is True
+    assert authenticated["warnings"] == []
     data = receipt.to_dict()
     data["task"] = "forged"
     result = verify_receipt(data, trusted_keys={"worker-1": public_pem})
     assert result["ok"] is False and result["hash_ok"] is False
-    assert verify_receipt(receipt, expected_context=context)["context_ok"] is True
+    bound = verify_receipt(receipt, expected_context=context, minimum_assurance="reported")
+    assert bound["context_ok"] is True
+    assert bound["warnings"] == []
+    authenticated_and_bound = verify_receipt(
+        receipt,
+        recheck=True,
+        recheck_root=tmp_path,
+        trusted_keys={"worker-1": public_pem},
+        expected_context=context,
+    )
+    assert authenticated_and_bound["ok"] is True
+    assert authenticated_and_bound["warnings"] == []
     wrong = {**context, "input_commit": "a" * 40}
     assert verify_receipt(receipt, expected_context=wrong)["ok"] is False
 
@@ -294,6 +682,7 @@ def test_invalid_recheck_root_is_structured_failure_and_reports_coverage(tmp_pat
     explicitly_accepted = verify_receipt(receipt, minimum_assurance="reported")
     assert explicitly_accepted["ok"] is True
     assert explicitly_accepted["assurance_ok"] is True
+    assert explicitly_accepted["warnings"] == []
 
 
 def test_cli_rejects_duplicate_and_undeclared_claim_evidence(tmp_path: Path):

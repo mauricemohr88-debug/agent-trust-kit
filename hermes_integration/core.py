@@ -28,7 +28,7 @@ from .bootstrap import ensure_repo_local_core
 
 ensure_repo_local_core()
 
-from agent_packet.builder import build_packet, inspect_packet  # noqa: E402
+from agent_packet.builder import build_packet, inspect_packet_details  # noqa: E402
 from agent_packet.secrets import scan_text_for_secrets  # noqa: E402
 from agent_receipt.core import load_receipt, verify_receipt  # noqa: E402
 
@@ -160,6 +160,38 @@ def _sha256_file(path: Path) -> str:
         return digest.hexdigest()
     finally:
         os.close(descriptor)
+
+
+def _read_bounded_json_object(path: Path, byte_limit: int) -> tuple[dict[str, Any], str]:
+    no_follow = getattr(os, "O_NOFOLLOW", None)
+    if no_follow is None:
+        raise ValueError("O_NOFOLLOW is unavailable")
+    flags = os.O_RDONLY | no_follow | getattr(os, "O_CLOEXEC", 0)
+    descriptor = os.open(path, flags)
+    try:
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_size > byte_limit:
+            raise ValueError("JSON file is not a bounded single-link regular file")
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            chunk = os.read(descriptor, min(65_536, byte_limit + 1 - total))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+            if total > byte_limit:
+                raise ValueError("JSON file exceeds its byte limit")
+        after = os.fstat(descriptor)
+        data = b"".join(chunks)
+        if len(data) != before.st_size or _file_signature(before) != _file_signature(after):
+            raise ValueError("JSON file changed while being read")
+    finally:
+        os.close(descriptor)
+    value = json.loads(data.decode("utf-8"), object_pairs_hook=_unique_object)
+    if not isinstance(value, dict):
+        raise ValueError("JSON file must contain an object")
+    return value, hashlib.sha256(data).hexdigest()
 
 
 def _regular_single_link(path: Path, label: str) -> None:
@@ -908,7 +940,10 @@ class TrustRuntime:
 
         packet_path = directory / "packet" / "packet.tar.gz"
         try:
-            manifest, archive_digest = inspect_packet(packet_path)
+            inspection = inspect_packet_details(packet_path)
+            manifest = inspection["manifest"]
+            archive_digest = inspection["archive_sha256"]
+            archive_manifest_digest = inspection["manifest_sha256"]
         except (OSError, ValueError) as exc:
             raise TrustError(
                 "packet_invalid",
@@ -939,7 +974,12 @@ class TrustRuntime:
                 "The prepared packet does not match controller state; do not approve it.",
             )
 
-        paths = self._verified_review_paths(directory, manifest, state_data["packet_digest"])
+        paths = self._verified_review_paths(
+            directory,
+            manifest,
+            state_data["packet_digest"],
+            archive_manifest_digest,
+        )
         return {
             "handoff_id": state_data["handoff_id"],
             "project_id": state_data["project_id"],
@@ -957,7 +997,11 @@ class TrustRuntime:
         }
 
     def _verified_review_paths(
-        self, directory: Path, manifest: dict[str, Any], packet_digest: str
+        self,
+        directory: Path,
+        manifest: dict[str, Any],
+        packet_digest: str,
+        archive_manifest_digest: str,
     ) -> dict[str, str]:
         packet_root = directory / "packet"
         payload_root = packet_root / "payload"
@@ -974,13 +1018,14 @@ class TrustRuntime:
                 if not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode):
                     raise ValueError("review directory is unsafe")
 
-            expected_manifest = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode(
-                "utf-8"
+            local_manifest, local_manifest_digest = _read_bounded_json_object(
+                paths["manifest"], MAX_CONTROL_FILE_BYTES
             )
             expected_sidecar = f"{packet_digest}  packet.tar.gz\n".encode("ascii")
             if (
                 _sha256_file(paths["packet"]) != packet_digest
-                or _sha256_file(paths["manifest"]) != hashlib.sha256(expected_manifest).hexdigest()
+                or local_manifest != manifest
+                or local_manifest_digest != archive_manifest_digest
                 or _sha256_file(paths["digest"]) != hashlib.sha256(expected_sidecar).hexdigest()
             ):
                 raise ValueError("review artifact digest mismatch")
@@ -1014,7 +1059,7 @@ class TrustRuntime:
                     or _sha256_file(source) != entry["sha256"]
                 ):
                     raise ValueError("review payload content mismatch")
-        except (OSError, TrustError, ValueError) as exc:
+        except (OSError, RecursionError, TrustError, ValueError) as exc:
             raise TrustError(
                 "packet_artifact_mismatch",
                 "Local packet inspection artifacts do not match the reviewed archive.",

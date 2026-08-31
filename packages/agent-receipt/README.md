@@ -55,11 +55,35 @@ agent-receipt verify receipt.json --recheck --recheck-root .
 Rechecks compare a current file hash to the hash observed while building the
 receipt. They therefore catch later file changes.
 
+A successful recheck that has neither an authenticated signature nor
+verifier-supplied handoff context includes this warning in JSON and human output:
+
+```text
+unauthenticated, unbound receipt: rechecks compare against claims stored in this receipt, not controller-supplied values
+```
+
+In that mode, file rechecks compare against hashes recorded inside the same
+untrusted receipt. An attacker who can replace both a returned file and its
+unsigned receipt can recompute the unkeyed digest. The warning does not change
+`ok`, the exit code, assurance, or context matching; it makes that trust boundary
+visible. Supply independently known context values and, when attribution is
+required, a trusted signing key rather than copying either from the receipt.
+
 ## Command evidence
 
 Commands run without a shell, with a constrained environment and bounded output.
 They always run from the trusted build root; no cwd is stored in the receipt.
 They can still execute repository code, so they are an explicit execution decision.
+On POSIX, timeout and output-limit cleanup terminates the command's process group.
+On Windows, the command is placed in a new process group and cleanup invokes the
+absolute System32 `taskkill.exe` with `/T /F`; if only direct-process termination
+is available, the failed evidence reports that descendant cleanup is unconfirmed.
+Pipe readers must also close within a bounded join after the direct command exits.
+If they remain open, a descendant still holds the command pipes: verification
+attempts cleanup and fails the command instead of reporting success. A Windows
+process group is not a Job Object; once a short-lived launcher has exited,
+`taskkill` may be unable to confirm descendant cleanup, which is reported as
+`ProcessTreeCleanupUnconfirmed`.
 
 Command rechecks require both a verifier-selected root and an exact tuple allowlist:
 

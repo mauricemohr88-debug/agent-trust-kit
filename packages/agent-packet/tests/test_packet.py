@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import math
@@ -9,7 +10,12 @@ from pathlib import Path
 import pytest
 
 from agent_packet import builder as packet_builder
-from agent_packet.builder import build_packet, inspect_packet, materialize_packet
+from agent_packet.builder import (
+    build_packet,
+    inspect_packet,
+    inspect_packet_details,
+    materialize_packet,
+)
 from agent_packet.cli import main
 from agent_packet.secrets import redact_text, scan_text_for_secrets
 
@@ -391,6 +397,14 @@ def test_inspect_uses_verified_archive_parser(tmp_path: Path):
     man, out, _ = _build(tmp_path)
     inspected, digest = inspect_packet(out / "packet.tar.gz")
     assert inspected["files"][0]["path"] == "TASK.md" and digest == man.packet_sha256
+
+    details = inspect_packet_details(out / "packet.tar.gz")
+    assert details["manifest"] == inspected
+    assert details["archive_sha256"] == digest
+    assert (
+        details["manifest_sha256"]
+        == hashlib.sha256((out / "manifest.json").read_bytes()).hexdigest()
+    )
 
 
 def test_materialize_uses_hashed_snapshot_when_source_path_is_replaced(tmp_path: Path, monkeypatch):

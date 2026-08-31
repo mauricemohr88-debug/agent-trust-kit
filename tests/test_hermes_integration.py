@@ -15,6 +15,8 @@ from typing import Any
 
 import pytest
 
+import hermes_integration.core as integration_core
+from agent_packet import builder as packet_builder
 from agent_packet.builder import materialize_packet
 from agent_receipt.core import Claim, Evidence, build_receipt, evidence_file_hash, save_receipt
 from agent_receipt.output_manifest import create_output_manifest, save_output_manifest
@@ -401,10 +403,92 @@ def test_operator_review_rejects_mismatched_local_inspection_payload(tmp_path: P
     assert error.value.code == "packet_artifact_mismatch"
 
 
+def test_operator_review_keeps_local_manifest_byte_bound_to_verified_archive(
+    tmp_path: Path,
+) -> None:
+    runtime, _project_root = _runtime_and_project(tmp_path)
+    prepared = _prepare(runtime)
+    _state, directory = runtime._state(prepared["handoff_id"])
+    manifest_path = directory / "packet" / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_path.write_text(json.dumps(manifest, separators=(",", ":")), encoding="utf-8")
+
+    with pytest.raises(TrustError) as error:
+        runtime.review(prepared["handoff_id"])
+
+    assert error.value.code == "packet_artifact_mismatch"
+
+
+def test_operator_review_accepts_changed_serializer_when_archive_and_copy_match(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        packet_builder,
+        "_manifest_bytes",
+        lambda manifest: (
+            json.dumps(manifest.to_dict(), separators=(",", ":"), sort_keys=False) + "\n"
+        ).encode("utf-8"),
+    )
+    runtime, _project_root = _runtime_and_project(tmp_path)
+    prepared = _prepare(runtime)
+
+    reviewed = runtime.review(prepared["handoff_id"])
+
+    assert reviewed["packet_digest"] == prepared["packet_digest"]
+
+
+@pytest.mark.parametrize("tamper", ["type_change", "duplicate_key"])
+def test_operator_review_rejects_manifest_json_semantic_ambiguity(
+    tmp_path: Path, tamper: str
+) -> None:
+    runtime, _project_root = _runtime_and_project(tmp_path)
+    prepared = _prepare(runtime)
+    _state, directory = runtime._state(prepared["handoff_id"])
+    manifest_path = directory / "packet" / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if tamper == "type_change":
+        manifest["files"][0]["redactions"] = False
+        manifest_path.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
+    else:
+        original = manifest_path.read_text(encoding="utf-8")
+        manifest_path.write_text(
+            '{"schema":"agent-packet/v1",' + original.lstrip()[1:], encoding="utf-8"
+        )
+
+    with pytest.raises(TrustError) as error:
+        runtime.review(prepared["handoff_id"])
+
+    assert error.value.code == "packet_artifact_mismatch"
+
+
+def test_bounded_json_reader_detects_change_during_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "manifest.json"
+    path.write_text('{"value":"before"}', encoding="utf-8")
+    real_read = integration_core.os.read
+    changed = False
+
+    def racing_read(descriptor: int, count: int) -> bytes:
+        nonlocal changed
+        data = real_read(descriptor, count)
+        if data and not changed:
+            changed = True
+            path.write_text('{"value":"after"}', encoding="utf-8")
+        return data
+
+    monkeypatch.setattr(integration_core.os, "read", racing_read)
+
+    with pytest.raises(ValueError, match="changed while being read"):
+        integration_core._read_bounded_json_object(path, 1_024)
+
+
 @pytest.mark.parametrize(
     "tamper",
     [
         "manifest",
+        "manifest_hardlink",
+        "manifest_symlink",
         "digest",
         "payload_symlink",
         "payload_hardlink",
@@ -424,6 +508,18 @@ def test_operator_review_and_approval_reject_local_artifact_tampering(
 
     if tamper == "manifest":
         (packet_root / "manifest.json").write_text("{}\n", encoding="utf-8")
+    elif tamper == "manifest_hardlink":
+        target = packet_root / "manifest.json"
+        replacement = tmp_path / "manifest-hardlink.json"
+        replacement.write_bytes(target.read_bytes())
+        target.unlink()
+        os.link(replacement, target)
+    elif tamper == "manifest_symlink":
+        target = packet_root / "manifest.json"
+        replacement = tmp_path / "manifest-symlink.json"
+        replacement.write_bytes(target.read_bytes())
+        target.unlink()
+        target.symlink_to(replacement)
     elif tamper == "digest":
         (packet_root / "PACKET_SHA256.txt").write_text(
             f"{'0' * 64}  packet.tar.gz\n", encoding="ascii"

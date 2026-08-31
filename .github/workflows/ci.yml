@@ -51,6 +51,10 @@ jobs:
           PYTHON_VERSION: ${{ matrix.python-version }}
         run: uv run --python "$PYTHON_VERSION" pytest -q
 
+      - name: End-to-end smoke
+        if: matrix.python-version == '3.11'
+        run: scripts/smoke_e2e.sh
+
       - name: Lint
         if: matrix.python-version == '3.11'
         run: uv run ruff check --config pyproject.toml .
@@ -85,8 +89,12 @@ jobs:
       - name: Import native integration
         run: uv run --python 3.11 python -c "import hermes_integration; import hermes_integration.core"
 
-      - name: Test Windows support boundary
-        run: uv run --python 3.11 pytest -q tests/test_windows_boundary.py
+      - name: Test standalone packages and Windows support boundary
+        run: >-
+          uv run --python 3.11 pytest -q
+          packages/agent-packet/tests
+          packages/agent-receipt/tests
+          tests/test_windows_boundary.py
 
   packages:
     name: Build distributions
@@ -122,6 +130,7 @@ jobs:
           test "$release_version" = "$packet_version"
           test "$release_version" = "$receipt_version"
           test "$release_version" = "$plugin_version"
+          test -f "docs/RELEASE_NOTES_${GITHUB_REF_NAME}.md"
 
       - name: Check package metadata
         run: uvx --from twine==6.2.0 twine check dist/*/*
@@ -156,7 +165,7 @@ jobs:
   publish_agent_packet:
     name: Publish agent-packet to PyPI
     if: github.ref_type == 'tag'
-    needs: [test, packages]
+    needs: [test, windows_boundary, packages]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: pypi
@@ -179,7 +188,7 @@ jobs:
   publish_agent_receipt:
     name: Publish agent-receipt to PyPI
     if: github.ref_type == 'tag'
-    needs: [test, packages]
+    needs: [test, windows_boundary, packages]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: pypi-agent-receipt
@@ -235,8 +244,10 @@ jobs:
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber
           else
+            release_notes="docs/RELEASE_NOTES_${GITHUB_REF_NAME}.md"
+            test -f "$release_notes"
             gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
               --verify-tag \
               --title "Agent Trust Kit $GITHUB_REF_NAME" \
-              --notes-file docs/RELEASE_NOTES_v0.1.0.md
+              --notes-file "$release_notes"
           fi
