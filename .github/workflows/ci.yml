@@ -148,9 +148,16 @@ jobs:
         shell: bash
         run: |
           cd dist
-          find agent-packet agent-receipt -type f \
-            \( -name '*.whl' -o -name '*.tar.gz' \) -print0 \
-            | sort -z | xargs -0 sha256sum > SHA256SUMS
+          while IFS= read -r -d '' artifact; do
+            read -r digest _ < <(sha256sum "$artifact")
+            printf '%s  %s\n' "$digest" "${artifact##*/}"
+          done < <(
+            find agent-packet agent-receipt -type f \
+              \( -name '*.whl' -o -name '*.tar.gz' \) -print0 \
+              | sort -z
+          ) > SHA256SUMS
+          test "$(wc -l < SHA256SUMS)" -eq 4
+          ! grep -q '/' SHA256SUMS
 
       - name: Store release distributions
         if: github.ref_type == 'tag'
