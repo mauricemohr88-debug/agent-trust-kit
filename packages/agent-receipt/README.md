@@ -112,6 +112,11 @@ validates structure and internal consistency, not claim truth.
 The controller can inventory a completed output directory without executing any
 of its contents:
 
+Secure descriptor-relative manifest traversal currently requires macOS or Linux.
+On Windows, manifest create, load, save, and verify operations fail closed with
+an explicit unsupported-platform error; the Windows support in this release is
+limited to standalone receipt and command-evidence handling.
+
 ```bash
 agent-receipt manifest create --workspace-root ./worker-output --json
 agent-receipt manifest verify --workspace-root ./worker-output \

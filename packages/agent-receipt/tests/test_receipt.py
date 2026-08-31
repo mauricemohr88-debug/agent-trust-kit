@@ -38,6 +38,11 @@ from agent_receipt.output_manifest import (
     verify_output_manifest,
 )
 
+REQUIRES_SECURE_MANIFEST_TRAVERSAL = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="secure descriptor-relative output-manifest traversal is POSIX-only",
+)
+
 
 def _receipt(root: Path, evidence):
     return build_receipt(
@@ -237,7 +242,17 @@ def test_duplicate_command_evidence_is_rejected(tmp_path: Path):
         )
 
 
-def test_command_output_limit_fails_without_storing_output(tmp_path: Path):
+def test_command_output_limit_fails_without_storing_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    cleanup_threads: list[threading.Thread] = []
+    real_terminate = receipt_core._terminate_process
+
+    def recording_terminate(*args, **kwargs):
+        cleanup_threads.append(threading.current_thread())
+        return real_terminate(*args, **kwargs)
+
+    monkeypatch.setattr(receipt_core, "_terminate_process", recording_terminate)
     evidence = evidence_command(
         [
             sys.executable,
@@ -248,6 +263,7 @@ def test_command_output_limit_fails_without_storing_output(tmp_path: Path):
     )
     assert evidence.ok is False
     assert evidence.observed == {"error": "OutputLimitExceeded"}
+    assert cleanup_threads == [threading.main_thread()]
 
 
 def test_process_group_options_preserve_posix_and_isolate_windows_commands():
@@ -270,6 +286,8 @@ def test_posix_missing_group_does_not_confirm_observed_descendant_cleanup(
     def missing_group(*_args):
         raise ProcessLookupError
 
+    synthetic_sigkill = getattr(receipt_core.signal, "SIGKILL", 9)
+    monkeypatch.setattr(receipt_core.signal, "SIGKILL", synthetic_sigkill, raising=False)
     monkeypatch.setattr(
         receipt_core.os,
         "killpg",
@@ -407,13 +425,9 @@ def test_timeout_reports_unconfirmed_descendant_cleanup(
         pid = 4242
         stdout = io.BytesIO()
         stderr = io.BytesIO()
-        waits = 0
 
         def wait(self, timeout):
-            self.waits += 1
-            if self.waits == 1:
-                raise subprocess.TimeoutExpired([sys.executable], timeout)
-            return -1
+            raise subprocess.TimeoutExpired([sys.executable], timeout)
 
         def poll(self):
             return None
@@ -429,7 +443,7 @@ def test_timeout_reports_unconfirmed_descendant_cleanup(
         lambda _process, **_kwargs: False,
     )
 
-    evidence = evidence_command([sys.executable, "-c", "pass"], workspace_root=tmp_path)
+    evidence = evidence_command([sys.executable, "-c", "pass"], workspace_root=tmp_path, timeout=1)
 
     assert evidence.observed == {"error": "TimeoutExpiredProcessTreeCleanupUnconfirmed"}
 
@@ -748,6 +762,11 @@ def test_output_manifest_is_canonical_sorted_and_excludes_control_files(tmp_path
     (tmp_path / "receipt.json").write_text("controller receipt", encoding="utf-8")
     (tmp_path / "OUTPUT_MANIFEST.json").write_text("old manifest", encoding="utf-8")
 
+    if sys.platform == "win32":
+        with pytest.raises(OutputManifestError, match="secure manifest traversal is unsupported"):
+            create_output_manifest(tmp_path)
+        return
+
     manifest, digest = create_output_manifest(tmp_path)
 
     assert [entry["path"] for entry in manifest["files"]] == ["nested/a.txt", "z.txt"]
@@ -763,6 +782,7 @@ def test_output_manifest_is_canonical_sorted_and_excludes_control_files(tmp_path
     assert result["files"] == 2
 
 
+@REQUIRES_SECURE_MANIFEST_TRAVERSAL
 def test_output_manifest_detects_mutation(tmp_path: Path):
     artifact = tmp_path / "artifact.txt"
     artifact.write_text("before", encoding="utf-8")
@@ -776,6 +796,7 @@ def test_output_manifest_detects_mutation(tmp_path: Path):
     assert result["errors"] == ["changed files: 1"]
 
 
+@REQUIRES_SECURE_MANIFEST_TRAVERSAL
 def test_output_manifest_detects_extra_and_missing_files(tmp_path: Path):
     expected = tmp_path / "expected.txt"
     expected.write_text("expected", encoding="utf-8")
@@ -790,6 +811,7 @@ def test_output_manifest_detects_extra_and_missing_files(tmp_path: Path):
     assert result["differences"]["unexpected"] == ["extra.txt"]
 
 
+@REQUIRES_SECURE_MANIFEST_TRAVERSAL
 def test_output_manifest_rejects_symlinks(tmp_path: Path):
     outside = tmp_path.parent / f"{tmp_path.name}-outside.txt"
     outside.write_text("outside", encoding="utf-8")
@@ -801,6 +823,7 @@ def test_output_manifest_rejects_symlinks(tmp_path: Path):
         outside.unlink(missing_ok=True)
 
 
+@REQUIRES_SECURE_MANIFEST_TRAVERSAL
 def test_output_manifest_rejects_hardlinks(tmp_path: Path):
     original = tmp_path / "original.txt"
     original.write_text("same inode", encoding="utf-8")
@@ -811,6 +834,7 @@ def test_output_manifest_rejects_hardlinks(tmp_path: Path):
 
 
 @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFO unavailable on this platform")
+@REQUIRES_SECURE_MANIFEST_TRAVERSAL
 def test_output_manifest_rejects_special_files_without_blocking(tmp_path: Path):
     os.mkfifo(tmp_path / "pipe")
 
@@ -818,6 +842,7 @@ def test_output_manifest_rejects_special_files_without_blocking(tmp_path: Path):
         create_output_manifest(tmp_path)
 
 
+@REQUIRES_SECURE_MANIFEST_TRAVERSAL
 def test_output_manifest_enforces_file_and_byte_bounds(tmp_path: Path, monkeypatch):
     (tmp_path / "one.txt").write_bytes(b"1")
     (tmp_path / "two.txt").write_bytes(b"2")
@@ -831,6 +856,7 @@ def test_output_manifest_enforces_file_and_byte_bounds(tmp_path: Path, monkeypat
         create_output_manifest(tmp_path)
 
 
+@REQUIRES_SECURE_MANIFEST_TRAVERSAL
 def test_output_manifest_load_rejects_duplicate_json_keys(tmp_path: Path):
     path = tmp_path / "manifest.json"
     path.write_text(
@@ -843,6 +869,7 @@ def test_output_manifest_load_rejects_duplicate_json_keys(tmp_path: Path):
         load_output_manifest(path)
 
 
+@REQUIRES_SECURE_MANIFEST_TRAVERSAL
 def test_output_manifest_load_rejects_oversized_json_integer(tmp_path: Path):
     path = tmp_path / "manifest.json"
     path.write_text(
@@ -856,6 +883,7 @@ def test_output_manifest_load_rejects_oversized_json_integer(tmp_path: Path):
         load_output_manifest(path)
 
 
+@REQUIRES_SECURE_MANIFEST_TRAVERSAL
 def test_output_manifest_rejects_path_swap_during_open(tmp_path: Path, monkeypatch):
     victim = tmp_path / "victim.txt"
     victim.write_text("first inode", encoding="utf-8")
@@ -880,6 +908,7 @@ def test_output_manifest_rejects_path_swap_during_open(tmp_path: Path, monkeypat
         replacement.unlink(missing_ok=True)
 
 
+@REQUIRES_SECURE_MANIFEST_TRAVERSAL
 def test_output_manifest_rejects_content_change_after_hash(tmp_path: Path, monkeypatch):
     artifact = tmp_path / "artifact.txt"
     artifact.write_text("hashed contents", encoding="utf-8")
@@ -899,6 +928,7 @@ def test_output_manifest_rejects_content_change_after_hash(tmp_path: Path, monke
         create_output_manifest(tmp_path)
 
 
+@REQUIRES_SECURE_MANIFEST_TRAVERSAL
 def test_output_manifest_requires_two_identical_scans(tmp_path: Path, monkeypatch):
     (tmp_path / "first.txt").write_text("first", encoding="utf-8")
     real_scan = output_manifest._scan_workspace_once
@@ -917,6 +947,7 @@ def test_output_manifest_requires_two_identical_scans(tmp_path: Path, monkeypatc
         create_output_manifest(tmp_path)
 
 
+@REQUIRES_SECURE_MANIFEST_TRAVERSAL
 def test_output_manifest_cli_create_and_verify_json(tmp_path: Path, capsys):
     (tmp_path / "result.txt").write_text("ready", encoding="utf-8")
     output = tmp_path / "custom-manifest.json"
@@ -959,6 +990,7 @@ def test_output_manifest_cli_create_and_verify_json(tmp_path: Path, capsys):
     assert verified["digest"] == created["digest"]
 
 
+@REQUIRES_SECURE_MANIFEST_TRAVERSAL
 def test_output_manifest_cli_json_failure_is_clean(tmp_path: Path, capsys):
     path = tmp_path / "bad.json"
     path.write_text("{", encoding="utf-8")
@@ -981,6 +1013,7 @@ def test_output_manifest_cli_json_failure_is_clean(tmp_path: Path, capsys):
     assert "invalid output manifest JSON" in result["error"]
 
 
+@REQUIRES_SECURE_MANIFEST_TRAVERSAL
 def test_output_manifest_cli_digest_mismatch_fails_before_scan(tmp_path: Path, capsys, monkeypatch):
     (tmp_path / "result.txt").write_text("ready", encoding="utf-8")
     manifest, _ = create_output_manifest(tmp_path)

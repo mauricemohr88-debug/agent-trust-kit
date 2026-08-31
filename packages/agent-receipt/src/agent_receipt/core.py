@@ -329,20 +329,46 @@ def evidence_command(
             stream = streams[name]
             if stream is None:
                 return
-            while chunk := stream.read(8_192):
+            read_chunk = getattr(stream, "read1", stream.read)
+            while True:
                 remaining = MAX_COMMAND_OUTPUT - len(buffers[name])
+                chunk = read_chunk(min(8_192, remaining + 1))
+                if not chunk:
+                    break
                 if remaining > 0:
                     buffers[name].extend(chunk[:remaining])
                 if len(chunk) > remaining:
                     output_limit_hit.set()
-                    attempt_cleanup(descendants_observed=False)
                     break
 
         readers = [threading.Thread(target=drain, args=(name,), daemon=True) for name in streams]
         for reader in readers:
             reader.start()
+        command_deadline = time.monotonic() + timeout
         try:
-            return_code = proc.wait(timeout=timeout)
+            while True:
+                if output_limit_hit.is_set():
+                    attempt_cleanup(descendants_observed=False)
+                    try:
+                        return_code = proc.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        cleanup_confirmed.clear()
+                        cleanup_unconfirmed.set()
+                        try:
+                            proc.kill()
+                        except (OSError, ProcessLookupError):
+                            pass
+                    break
+                remaining = command_deadline - time.monotonic()
+                if remaining <= 0:
+                    raise subprocess.TimeoutExpired(cmd, timeout)
+                try:
+                    return_code = proc.wait(timeout=min(0.05, remaining))
+                    if output_limit_hit.is_set():
+                        attempt_cleanup(descendants_observed=False)
+                    break
+                except subprocess.TimeoutExpired:
+                    continue
         except subprocess.TimeoutExpired:
             attempt_cleanup(descendants_observed=False)
             try:
@@ -375,6 +401,12 @@ def evidence_command(
             if not readers_closed:
                 cleanup_confirmed.clear()
                 cleanup_unconfirmed.set()
+        if (
+            output_limit_hit.is_set()
+            and not cleanup_confirmed.is_set()
+            and not cleanup_unconfirmed.is_set()
+        ):
+            attempt_cleanup(descendants_observed=False)
         if output_limit_hit.is_set():
             error = (
                 "OutputLimitExceededProcessTreeCleanupUnconfirmed"

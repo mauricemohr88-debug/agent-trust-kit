@@ -24,8 +24,9 @@ finding with reproducible detail.
   `inspect_packet_details()` API exposes the verified archive and manifest-member hashes without
   breaking existing callers.
 - Linux CI now runs the end-to-end smoke flow.
-- Windows CI runs both standalone package suites, including real timeout, exited-launcher, and
-  output-limit descendant-process regressions.
+- Windows CI runs both standalone package suites, with the deliberately POSIX-only output-manifest
+  traversal tests skipped, and includes real timeout, exited-launcher, and output-limit
+  descendant-process regressions.
 - PyPI publication for both packages now waits for the Windows job, and tag-specific release notes
   are checked before publishing.
 
@@ -34,7 +35,8 @@ finding with reproducible detail.
 The native Hermes plugin remains supported on macOS and Linux only. This release improves the
 standalone `agent-receipt` Windows command-cleanup path; it does not claim a Windows sandbox or a
 native Windows Hermes port. `taskkill /T /F` handles normal descendant process trees, not every
-possible hostile process-escape technique.
+possible hostile process-escape technique. Secure output-manifest traversal also remains
+macOS/Linux-only and fails closed on Windows.
 
 ## Validation before publication
 
