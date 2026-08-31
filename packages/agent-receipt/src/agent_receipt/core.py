@@ -15,6 +15,7 @@ import re
 import signal
 import subprocess
 import threading
+import time
 import unicodedata
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -33,9 +34,16 @@ MAX_COMMAND_ARGS = 32
 MAX_COMMAND_OUTPUT = 64 * 1024
 MAX_COMMAND_TIMEOUT = 60
 VERIFIER_COMMAND_TIMEOUT = 20
+WINDOWS_TERMINATION_TIMEOUT = 5
+COMMAND_READER_JOIN_TIMEOUT = 1
+UNBOUND_RECEIPT_WARNING = (
+    "unauthenticated, unbound receipt: rechecks compare against claims stored in this receipt, "
+    "not controller-supplied values"
+)
 _EVIDENCE_KINDS = {"file_hash", "command", "text_contains", "path_exists"}
 _SIGNING_CONTEXT = b"agent-receipt/v1\x00"
 _ASSURANCE_RANK = {"reported": 0, "partially_rechecked": 1, "fully_rechecked": 2}
+_WINDOWS_CREATE_NEW_PROCESS_GROUP = 0x00000200
 
 
 def _sha256_bytes(data: bytes) -> str:
@@ -236,6 +244,47 @@ def _command_detail(
     }
 
 
+def _process_group_options(platform_name: str | None = None) -> dict[str, Any]:
+    selected = os.name if platform_name is None else platform_name
+    if selected == "posix":
+        return {"start_new_session": True}
+    if selected == "nt":
+        return {"creationflags": _WINDOWS_CREATE_NEW_PROCESS_GROUP}
+    return {}
+
+
+def _trusted_windows_taskkill_path() -> Path:
+    system_root = os.environ.get("SystemRoot")
+    if not system_root:
+        raise OSError("SystemRoot is unavailable")
+    root = Path(system_root)
+    if not root.is_absolute():
+        raise OSError("SystemRoot is not absolute")
+    root = root.resolve(strict=True)
+    taskkill = (root / "System32" / "taskkill.exe").resolve(strict=True)
+    if not taskkill.is_file() or not taskkill.is_relative_to(root):
+        raise OSError("trusted taskkill.exe is unavailable")
+    return taskkill
+
+
+def _command_environment() -> dict[str, str]:
+    environment = {
+        "PATH": os.environ.get("PATH", os.defpath),
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+    }
+    if os.name == "nt" and os.environ.get("SystemRoot"):
+        environment["SystemRoot"] = os.environ["SystemRoot"]
+    return environment
+
+
+def _join_reader_threads(readers: list[threading.Thread]) -> bool:
+    deadline = time.monotonic() + COMMAND_READER_JOIN_TIMEOUT
+    for reader in readers:
+        reader.join(timeout=max(0.0, deadline - time.monotonic()))
+    return all(not reader.is_alive() for reader in readers)
+
+
 def evidence_command(
     cmd: list[str],
     *,
@@ -258,45 +307,120 @@ def evidence_command(
             shell=False,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            start_new_session=True,
-            env={
-                "PATH": os.environ.get("PATH", os.defpath),
-                "LANG": "C.UTF-8",
-                "LC_ALL": "C.UTF-8",
-            },
+            env=_command_environment(),
+            **_process_group_options(),
         )
         streams = {"stdout": proc.stdout, "stderr": proc.stderr}
         buffers = {"stdout": bytearray(), "stderr": bytearray()}
         output_limit_hit = threading.Event()
+        cleanup_confirmed = threading.Event()
+        cleanup_unconfirmed = threading.Event()
+
+        def attempt_cleanup(*, descendants_observed: bool) -> bool:
+            confirmed = _terminate_process(proc, descendants_observed=descendants_observed)
+            if confirmed:
+                cleanup_confirmed.set()
+                cleanup_unconfirmed.clear()
+            elif not cleanup_confirmed.is_set():
+                cleanup_unconfirmed.set()
+            return confirmed
 
         def drain(name: str) -> None:
             stream = streams[name]
             if stream is None:
                 return
-            while chunk := stream.read(8_192):
+            read_chunk = getattr(stream, "read1", stream.read)
+            while True:
                 remaining = MAX_COMMAND_OUTPUT - len(buffers[name])
+                chunk = read_chunk(min(8_192, remaining + 1))
+                if not chunk:
+                    break
                 if remaining > 0:
                     buffers[name].extend(chunk[:remaining])
                 if len(chunk) > remaining:
                     output_limit_hit.set()
-                    _terminate_process(proc)
                     break
 
         readers = [threading.Thread(target=drain, args=(name,), daemon=True) for name in streams]
         for reader in readers:
             reader.start()
+        command_deadline = time.monotonic() + timeout
         try:
-            return_code = proc.wait(timeout=timeout)
+            while True:
+                if output_limit_hit.is_set():
+                    attempt_cleanup(descendants_observed=False)
+                    try:
+                        return_code = proc.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        cleanup_confirmed.clear()
+                        cleanup_unconfirmed.set()
+                        try:
+                            proc.kill()
+                        except (OSError, ProcessLookupError):
+                            pass
+                    break
+                remaining = command_deadline - time.monotonic()
+                if remaining <= 0:
+                    raise subprocess.TimeoutExpired(cmd, timeout)
+                try:
+                    return_code = proc.wait(timeout=min(0.05, remaining))
+                    if output_limit_hit.is_set():
+                        attempt_cleanup(descendants_observed=False)
+                    break
+                except subprocess.TimeoutExpired:
+                    continue
         except subprocess.TimeoutExpired:
-            _terminate_process(proc)
-            proc.wait(timeout=5)
-            for reader in readers:
-                reader.join(timeout=1)
-            return Evidence("command", detail, False, {"error": "TimeoutExpired"})
-        for reader in readers:
-            reader.join(timeout=1)
+            attempt_cleanup(descendants_observed=False)
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                cleanup_confirmed.clear()
+                cleanup_unconfirmed.set()
+                try:
+                    proc.kill()
+                except (OSError, ProcessLookupError):
+                    pass
+            readers_closed = _join_reader_threads(readers)
+            if not readers_closed:
+                attempt_cleanup(descendants_observed=True)
+                readers_closed = _join_reader_threads(readers)
+            if not readers_closed:
+                cleanup_confirmed.clear()
+                cleanup_unconfirmed.set()
+            error = (
+                "TimeoutExpiredProcessTreeCleanupUnconfirmed"
+                if cleanup_unconfirmed.is_set()
+                else "TimeoutExpired"
+            )
+            return Evidence("command", detail, False, {"error": error})
+        readers_closed = _join_reader_threads(readers)
+        outlived_parent = not readers_closed
+        if outlived_parent:
+            attempt_cleanup(descendants_observed=True)
+            readers_closed = _join_reader_threads(readers)
+            if not readers_closed:
+                cleanup_confirmed.clear()
+                cleanup_unconfirmed.set()
+        if (
+            output_limit_hit.is_set()
+            and not cleanup_confirmed.is_set()
+            and not cleanup_unconfirmed.is_set()
+        ):
+            attempt_cleanup(descendants_observed=False)
         if output_limit_hit.is_set():
-            return Evidence("command", detail, False, {"error": "OutputLimitExceeded"})
+            error = (
+                "OutputLimitExceededProcessTreeCleanupUnconfirmed"
+                if cleanup_unconfirmed.is_set()
+                else "OutputLimitExceeded"
+            )
+            return Evidence("command", detail, False, {"error": error})
+        if outlived_parent:
+            error = (
+                "ProcessTreeCleanupUnconfirmed"
+                if cleanup_unconfirmed.is_set()
+                else "ProcessTreeOutlivedParent"
+            )
+            return Evidence("command", detail, False, {"error": error})
 
         out, err = bytes(buffers["stdout"]), bytes(buffers["stderr"])
         stdout_contains_matched = stdout_contains is None or stdout_contains.encode() in out
@@ -319,16 +443,50 @@ def evidence_command(
         return Evidence("command", detail, False, {"error": type(exc).__name__})
 
 
-def _terminate_process(proc: subprocess.Popen[bytes]) -> None:
-    if proc.poll() is not None:
-        return
-    try:
-        if os.name == "posix":
+def _terminate_process(
+    proc: subprocess.Popen[bytes],
+    *,
+    descendants_observed: bool = True,
+    platform_name: str | None = None,
+) -> bool:
+    selected_platform = os.name if platform_name is None else platform_name
+    if selected_platform == "posix":
+        try:
             os.killpg(proc.pid, signal.SIGKILL)
-        else:
+            return True
+        except ProcessLookupError:
+            if not descendants_observed and proc.poll() is not None:
+                return True
+        except OSError:
+            if not descendants_observed and proc.poll() is not None:
+                return True
+    if selected_platform == "nt":
+        try:
+            result = subprocess.run(  # noqa: S603 -- absolute trusted system executable
+                [
+                    str(_trusted_windows_taskkill_path()),
+                    "/PID",
+                    str(proc.pid),
+                    "/T",
+                    "/F",
+                ],
+                check=False,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                shell=False,
+                timeout=WINDOWS_TERMINATION_TIMEOUT,
+            )
+            if result.returncode == 0:
+                return True
+        except (OSError, RuntimeError, ValueError, subprocess.SubprocessError):
+            pass
+    if proc.poll() is None:
+        try:
             proc.kill()
-    except ProcessLookupError:
-        return
+        except (OSError, ProcessLookupError):
+            pass
+    return False
 
 
 def build_receipt(
@@ -678,6 +836,7 @@ def verify_receipt(
             "schema_ok": False,
             "hash_ok": False,
             "authenticated": None,
+            "warnings": [],
             "errors": errors,
             "claims": [],
         }
@@ -689,6 +848,7 @@ def verify_receipt(
             "schema_ok": True,
             "hash_ok": False,
             "authenticated": None,
+            "warnings": [],
             "errors": ["recheck_root must be an existing directory"],
             "claims": [],
         }
@@ -808,6 +968,7 @@ def verify_receipt(
             "reported_evidence": total_evidence - rechecked_evidence - blocked_evidence,
             "blocked_evidence": blocked_evidence,
         },
+        "warnings": [],
         "errors": sig_errors,
     }
     if not digest_ok:
@@ -818,6 +979,13 @@ def verify_receipt(
         result["errors"].append("receipt context does not match verifier expectations")
     if not assurance_ok:
         result["errors"].append(f"assurance {assurance!r} is below required {minimum_assurance!r}")
+    if (
+        result["ok"]
+        and (recheck or recheck_commands)
+        and authenticated is None
+        and expected_context is None
+    ):
+        result["warnings"].append(UNBOUND_RECEIPT_WARNING)
     return result
 
 

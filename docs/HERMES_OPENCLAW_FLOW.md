@@ -152,6 +152,19 @@ agent-receipt verify receipt.json \
   --recheck-root /path/to/controller-selected/received-workspace
 ```
 
+Because this standalone example supplies neither a trusted signing key nor
+independently known handoff context, a successful run also prints:
+
+```text
+warning: unauthenticated, unbound receipt: rechecks compare against claims stored in this receipt, not controller-supplied values
+```
+
+That warning is additive: it does not change `ok`, the exit code, `assurance`, or
+context semantics. It means the live files were compared with claims stored in
+the same untrusted receipt. A party able to replace both can recompute its unkeyed
+digest. Bind all three independently known context values and use a trusted key
+when signer attribution matters; do not copy those trust anchors from the receipt.
+
 Look at both `ok` and `assurance`. `fully_rechecked` means every evidence item in
 that receipt was rerun. `reported` means none was rerun. If the receipt includes a
 worker-reported command, `--recheck` alone intentionally does not execute it.

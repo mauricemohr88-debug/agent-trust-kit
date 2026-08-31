@@ -446,6 +446,8 @@ def main(argv: list[str] | None = None) -> int:
                 )
             for c in result["claims"]:
                 print(f" - {c['id']}: {'OK' if c['ok'] else 'FAIL'} — {c['statement']}")
+            for warning in result.get("warnings", []):
+                print(f"warning: {warning}")
             for error in result.get("errors", []):
                 print(f"error: {error}")
         return 0 if result["ok"] else 1

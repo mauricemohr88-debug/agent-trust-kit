@@ -1,6 +1,6 @@
 manifest_version: 1
 name: agent-trust
-version: "0.1.0"
+version: "0.1.1"
 description: "Bounded agent handoffs with controller-side verification."
 author: "Maurice Mohr"
 kind: standalone

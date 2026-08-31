@@ -34,7 +34,7 @@ dev = [
 
 [[package]]
 name = "agent-packet"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "packages/agent-packet" }
 
 [package.optional-dependencies]
@@ -52,7 +52,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "agent-receipt"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "packages/agent-receipt" }
 dependencies = [
     { name = "cryptography" },
