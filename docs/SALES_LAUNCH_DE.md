@@ -1,4 +1,12 @@
-# Erster Umsatz: persönlicher 14-Tage-Test
+# Pausiert: persönlicher 14-Tage-Verkaufstest
+
+**Status seit 12.09.2026: archivierter Plan, nicht ausführen.** Der
+[149-€-Review-Pilot](FOUNDING_PILOT_DE.md) ist pausiert. Die folgenden
+Veröffentlichungs- und Nachrichtentexte bleiben als historische Entwürfe stehen;
+sie sind kein aktueller Aufruf, keine Versandfreigabe und keine Lieferzusage.
+Aktuell gilt der [kostenlose, asynchrone Testaufruf](../README.md#try-it-and-tell-us-where-you-got-stuck).
+
+## Historischer Plan
 
 Das Ziel ist nicht maximale Reichweite, sondern **ein bezahlter 149-€-Pilot oder
 drei qualifizierte Gespräche**. Verkauft werden Review, Urteil und Umsetzung —

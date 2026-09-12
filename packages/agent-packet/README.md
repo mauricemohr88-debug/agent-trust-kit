@@ -109,12 +109,14 @@ before transport because heuristic detection can miss secrets.
 3. Consumer returns results (and ideally an `agent-receipt`).
 4. Producer verifies receipt before trusting “done”.
 
-## Open core and paid work
+## Free core and tester feedback
 
-The complete local CLI stays open source and offline-first. Teams can pay for a
-bounded workflow review, organisation-specific include/deny policies, CI or
-orchestrator integration, and support. The first offer is a manually delivered
-founding pilot, not a hosted dashboard.
+The complete local CLI stays open source and offline-first. The former paid
+workflow-review pilot is paused; there is no active booking or delivery offer.
+Try a non-sensitive handoff and share a short, sanitized report in
+[issue #3](https://github.com/mauricemohr88-debug/agent-trust-kit/issues/3).
+The [repository quickstart](../../README.md#try-one-local-handoff) includes a
+local example with an intentionally tampered return.
 
 ## License
 
