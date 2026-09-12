@@ -1,4 +1,17 @@
-# Intake — Agent Handoff Safety Review
+# Pausiertes Intake — Agent Handoff Safety Review
+
+**Status seit 12.09.2026: historische Vorlage, nicht für neue Buchungen.** Das
+[zugehörige Review-Angebot](FOUNDING_PILOT_DE.md) ist pausiert. Bitte diese
+Vorlage nicht für neue Aufträge ausfüllen und keine Rechnungs- oder Zugangsdaten
+einsenden. Die 149 € und die 48-Stunden-Frist unten sind archivierter Umfang,
+keine aktuelle Zusage. Bereits separat vereinbarte Verpflichtungen bleiben
+unverändert.
+
+Für den aktuellen kostenlosen, asynchronen OSS-Test reichen die Angaben im
+[Testaufruf](../README.md#try-it-and-tell-us-where-you-got-stuck); Zahlung,
+Rechnungsdaten und ein Gespräch sind dafür nicht nötig.
+
+## Historische Vorlage
 
 Dieses kurze Formular wird **vor Zahlung und Start** gemeinsam ausgefüllt. Es ist
 eine operative Scope-Bestätigung, keine Rechts- oder Compliance-Beratung.

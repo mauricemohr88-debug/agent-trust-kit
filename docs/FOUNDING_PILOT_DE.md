@@ -1,4 +1,17 @@
-# Agent Handoff Safety Review — Founding Pilot
+# Pausiert: Agent Handoff Safety Review — Founding Pilot
+
+**Status seit 12.09.2026: pausiert, kein aktives Angebot.** Es werden über diese
+Seite keine neuen Reviews, Zahlungen oder Termine angenommen. Die damaligen
+149 € und die 48-Stunden-Frist unten dokumentieren nur den historischen Umfang;
+sie sind keine aktuelle Preis- oder Lieferzusage. Bereits separat vereinbarte
+Verpflichtungen werden durch diese Dokumentation nicht verändert.
+
+Aktuell gesucht: zwei kostenlose, asynchrone Tests eines nicht vertraulichen
+Handoffs, mit Feedback in
+[Issue #3](https://github.com/mauricemohr88-debug/agent-trust-kit/issues/3).
+Es gibt dafür keinen Verkaufscall. Der vollständige lokale OSS-Kern bleibt frei.
+
+## Historischer Angebotsumfang — nicht buchbar
 
 **149 € Festpreis** (zzgl. USt., falls anwendbar) · **Lieferung innerhalb von 48
 Stunden** nach Zahlung, bereinigtem Intake und schriftlicher Scope-Bestätigung ·
@@ -59,6 +72,6 @@ Implementierung oder CI-Integration wird vor Beginn separat angeboten. Als
 Gegenleistung für den Founding-Preis wünsche ich mir ehrliches Feedback; eine
 öffentliche Nennung oder ein Testimonial ist freiwillig.
 
-**Interesse:** DM an [@KI_Vater auf X](https://x.com/KI_Vater) mit dem Stichwort
-„Handoff Review“. Vor dem Start werden Umfang, Zugang und Preis schriftlich
-bestätigt.
+Der frühere DM-Aufruf ist zurückgezogen. Eine mögliche Wiederaufnahme dieses
+Serviceangebots braucht eine neue ausdrückliche Entscheidung; dieses Dokument
+startet weder Akquise noch eine Lieferfrist.

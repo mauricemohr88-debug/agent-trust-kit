@@ -27,7 +27,7 @@ Avoid:
 - verified, authentic, tamper-proof, zero-trust, or compliant workflows;
 - signatures described as proof that a claim is true.
 
-## Open source and paid boundary
+## Open source and optional later work
 
 Open source:
 
@@ -36,7 +36,7 @@ Open source:
 - verifier-controlled rechecks and signature verification;
 - default policy examples, CI examples, and threat models.
 
-Paid:
+Possible later paid work, not an active offer:
 
 - workflow and repository review;
 - organisation-specific include/deny and command policies;
@@ -46,27 +46,46 @@ Paid:
 
 Core verification must not become artificially weak to create a paywall.
 
-## First revenue test
+## Current focus: free, asynchronous workflow validation
 
-Sell three **149 € Agent Handoff Review** founding pilots before building a hosted
-dashboard. Each pilot covers one immutable revision of one Python/JavaScript/
-TypeScript repository, one handoff, no more than three relevant directories or
-about 20,000 relevant LOC, a short prioritised report, a tailored policy, one
-controller-defined local gate, and a 30-minute handoff. The 48-hour clock starts
-only after payment, sanitised intake, and written scope confirmation. Fix
-implementation and CI integration are separate work.
+As of 2026-09-12, the manually delivered 149 € review pilot is paused. Its calls,
+48-hour turnaround, and follow-up support require operator time; they are not
+the current onboarding route. The [offer](FOUNDING_PILOT_DE.md),
+[intake](PILOT_INTAKE_DE.md), and [sales drafts](SALES_LAUNCH_DE.md) are historical
+records, not booking or outreach instructions.
 
-Success after 14 days:
+The immediate task is to help two independent testers complete one
+non-sensitive packet → receipt → controller-recheck flow and report the first
+point of friction in
+[issue #3](https://github.com/mauricemohr88-debug/agent-trust-kit/issues/3).
+Participation is free and asynchronous; no call or paid review is required.
+Record installation, a local example, a real handoff, help needed, and repeat use
+separately. Missing tester feedback is unknown, not adoption or revenue.
+
+Keep the complete local core free. Do not add billing, a hosted control plane,
+or another service offer on the strength of a release or maintainer smoke test.
+Any later convenience layer needs repeated use and a concrete recurring problem
+reported by independent users first.
+
+## Historical revenue test — paused
+
+The former plan was to sell three **149 € Agent Handoff Review** founding pilots
+before building a hosted dashboard. Each pilot covered one immutable revision
+of one Python/JavaScript/TypeScript repository, one handoff, no more than three
+relevant directories or about 20,000 relevant LOC, a short prioritised report,
+a tailored policy, one
+controller-defined local gate, and a 30-minute handoff. The proposed 48-hour
+clock would start only after payment, sanitised intake, and written scope
+confirmation. Fix implementation and CI integration were separate work.
+
+The former 14-day success criteria were:
 
 - one paid pilot or three qualified conversations;
 - one adversarially tested real handoff;
 - two outside testers able to follow the quick start;
 - zero open release-blocking security findings.
 
-Only build a hosted product after at least three paid pilots reveal a repeated
-problem that software can remove.
-
-## 14-day execution
+## Historical 14-day execution — not the current work queue
 
 1. Finish threat models, archive and receipt recheck hardening.
 2. Make test, lint, build, package-content, and end-to-end gates reproducible.

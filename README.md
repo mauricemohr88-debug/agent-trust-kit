@@ -35,12 +35,37 @@ trusted controller -> independent checks -> accept or reject
 
 ## Start here
 
+- [Try one local handoff, including a rejected tampered return](#try-one-local-handoff)
 - [Follow the complete Hermes/OpenClaw handoff](docs/HERMES_OPENCLAW_FLOW.md)
 - [Install and use the native Hermes plugin](docs/HERMES_PLUGIN.md)
 - [Understand the security boundary](THREAT_MODEL.md)
 - [Review the local validation record](docs/LOCAL_VALIDATION.md)
 - [Read the first native Hermes dogfood record](docs/DOGFOOD_2026-08-03.md)
 - [Review the isolated Hermes v0.20.0 compatibility check](docs/COMPATIBILITY_2026-08-05.md)
+
+## Try one local handoff
+
+Start with generated example files, not a private repository. With Python 3.10+,
+Git, Bash, and [uv](https://docs.astral.sh/uv/) installed:
+
+```bash
+git clone https://github.com/mauricemohr88-debug/agent-trust-kit.git
+cd agent-trust-kit
+uv sync --all-packages --group dev
+bash scripts/smoke_e2e.sh
+```
+
+The script builds a packet from a tiny example, checks that the fixture's
+`.env` and private file are omitted, materializes the packet into a separate
+temporary directory, records a `RESULT.md` claim, and rechecks it. It then
+changes the result and requires verification to reject it. The expected final
+line is `end-to-end smoke passed`; temporary example files are removed on exit.
+
+This demonstrates the local packet → receipt → recheck flow. It does not run
+Hermes, contact a worker, test the latest Hermes release, or prove that every
+secret would be detected. Dependency installation may use the network. For the
+operator-controlled workflow, continue with the
+[complete handoff guide](docs/HERMES_OPENCLAW_FLOW.md).
 
 ## Install the Python tools
 
@@ -113,17 +138,26 @@ selected Windows worker or transfer path rewrites LF line endings to CRLF, the
 changed bytes will not match the recorded digest. Preserve file bytes across
 checkouts and transfers.
 
-## Want help applying this to a real workflow?
+## Try it and tell us where you got stuck
 
-The code and local verification tools are MIT-licensed. If you want a human
-review of one concrete agent handoff, the
-[149 € founding pilot](docs/FOUNDING_PILOT_DE.md) includes a prioritized short
-report, a workflow-specific include/deny policy, one reproducible controller
-check, and a 30-minute results handoff.
+We are looking for two independent testers to follow one non-sensitive
+handoff. Start with the local example above, then try the native Hermes flow
+only if it fits your setup. Share a short, sanitized report in
+[issue #3](https://github.com/mauricemohr88-debug/agent-trust-kit/issues/3):
 
-This is a fixed-scope review service—not SaaS, a penetration test,
-certification, or a guarantee against secrets or malicious workers. The
-[German intake](docs/PILOT_INTAKE_DE.md) fixes the scope before work starts.
+- OS, Python version, tool version or Git commit, and Hermes version if used;
+- what you wanted to hand off and which guide you followed;
+- the last completed step and the first confusing or failed step;
+- whether you needed help and whether you would use it again.
+
+The test is free, asynchronous, and needs no sales call. Do not post private
+source, credentials, raw packets, or real receipts. A local smoke run is not
+independent two-machine or real-workflow validation.
+
+The full local core stays MIT-licensed. The former
+[149 € review pilot](docs/FOUNDING_PILOT_DE.md) and its
+[intake](docs/PILOT_INTAKE_DE.md) are **paused**, retained only as historical
+scope records; they are not an active booking or 48-hour delivery offer.
 
 ## Relationship to Hermes Plugin Guard
 
@@ -137,12 +171,12 @@ release and support cycles.
 - `v0.1.0` is the first public beta for the native Hermes plugin,
   `agent-packet`, and `agent-receipt`. Tagged releases publish the two Python
   tools through PyPI Trusted Publishing without a stored upload token.
-- Local lint, the Python 3.10–3.14 test matrix, package builds, wheel-install
-  smoke, and the end-to-end handoff are green; see the
-  [local validation record](docs/LOCAL_VALIDATION.md).
-- GitHub CI and CodeQL are green on the public `main` branch. One real
-  non-sensitive native Hermes workflow has now been dogfooded; see the
-  [recorded result](docs/DOGFOOD_2026-08-03.md). Feedback from two outside
+- The dated [local validation record](docs/LOCAL_VALIDATION.md) documents lint,
+  the Python 3.10–3.14 test matrix, package builds, wheel-install smoke, and an
+  end-to-end handoff. It is not a current CI or latest-Hermes compatibility
+  report; the badges link to the live workflows.
+- One non-sensitive native Hermes workflow was maintainer-dogfooded; see the
+  [2026-08-03 record](docs/DOGFOOD_2026-08-03.md). Feedback from two outside
   testers remains an open beta-validation goal tracked in
   [issue #3](https://github.com/mauricemohr88-debug/agent-trust-kit/issues/3);
   it is not presented as completed evidence.
